@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	// "testing"
 	// "compress/gzip"
 	"fmt"
 	"io/ioutil"
@@ -12,7 +13,7 @@ import (
 	// "io"
 	// "encoding/binary"
 	"encoding/gob"
-	// "net/http"
+	"net/http"
 	"os"
 	// "os/exec"
 	// "reflect"
@@ -30,10 +31,15 @@ import (
 	"./tang"
 	"compress/lzw"
 	"io"
-	// "sort"
+	"sort"
 	"strconv"
 	// "text/template"
+	// "net/http"
+	"html/template"
+	"path/filepath"
 )
+
+const version = "snpMiner3 (alpha) 0.17.10"
 
 var linesFromGB []string
 var genome_anchors = map[int]string{}
@@ -43,45 +49,33 @@ var AllGenesVal []gene.Gene
 var flgMkDB = flag.Bool("mkdb", false, "Create database from genbank file")
 var flgGBfile = flag.String("gb", "", "Genbank file")
 var flgAbout = flag.Bool("v", false, "About")
+
 var flgOut = flag.String("out", "", "database filename")
 var flgDB = flag.String("db", "", "database file")
 var flgVCF = flag.String("vcf", "", "vcf file")
 var flgPos = flag.Int("pos", 0, "Position of SNP")
 var flgDebug = flag.Bool("debug", false, "")
 var flgGenomeMap = flag.Bool("gmap", false, "")
-var flgMakeNCSeq = flag.Bool("mkseq", false, "")
+var flgMakeSeq = flag.String("mkseq", "", "NC or AA")
 var flgTang = flag.Bool("tang", false, "")
 var flgDevMode = flag.Bool("dev", false, "")
 var flgReportType = flag.String("rep", "", "")
 var flgSNP = flag.String("snp", "", "flag snp")
+var flgWeb = flag.Bool("web", false, "")
+
+type SeqInfo struct {
+	Name, Seq string
+	// Len       int
+}
 
 // var GenomeAccessNbr string
 
 // var GenomeSeq string
 var GenomeSeqSlice []string
 
-const PrintResult = `
-Locus {{.Locus}} 
-Abs. position {{.Apos}}\t{{.CPosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CCodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}{{.Product}}\n`
-
-// snp.Locus, snp.Apos, snp.CPosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
-// 									snp.RefAAShort, snp.CCodonNbrInG, snp.AltAAShort, snp.Mutation,
-// 									snp.Tang, snp.Product
-
-// %v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\t%v\n
-
-// type SNPinfo struct {
-// 	Apos, Gpos, PosInCodonG, CodonNbrInG, CPosInGene, CCodonNbrInG int
-// 	RefCodon, AltCodon, RefAA, AltAA, Locus,
-// 	Direction, NucInPos, Product, Name, Start,
-// 	RefAAShort, AltAAShort, End, Mutation, Tang, Alt, Note string
-// }
-
-// type ResValues struct {
-//  Locus, apos, snp.CPosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
-// 									snp.RefAAShort, snp.CCodonNbrInG, snp.AltAAShort, snp.Mutation,
-// 									snp.Tang, snp.Product
-// }
+// const PrintResult = `
+// Locus {{.Locus}}
+// Abs. position {{.Apos}}\t{{.CPosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CCodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}{{.Product}}\n`
 
 func main() {
 
@@ -116,15 +110,26 @@ func main() {
 
 		AllGenesVal = ReadDB(*flgDB)
 
-		if *flgMakeNCSeq != false && *flgOut != "" {
+		// if *flgMakeSeq != false && *flgOut != "" {
 
-			fmt.Println("Reserved!")
-		}
+		// 	fmt.Println("Reserved!")
+		// }
 
-		if *flgVCF != "" && *flgVCF != "list" {
-			ParserVCF(*flgVCF, AllGenesVal)
-		} else if *flgVCF != "" && *flgVCF == "list" {
+		if *flgVCF != "" && *flgVCF != "list" && *flgWeb == false && *flgMakeSeq == "" {
+
+			ParserVCF(*flgVCF, true, AllGenesVal)
+
+		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "" {
 			ListOfVCFFiles()
+		} else if *flgVCF != "" && *flgVCF != "list" && *flgWeb == true && *flgMakeSeq == "" {
+			PrintWebResults()
+		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "NC" {
+			seq := MakeSeq("NC")
+			for _, val := range seq {
+				fmt.Println(val.Seq)
+			}
+		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "AA" {
+			MakeSeq("AA")
 		}
 
 		if *flgSNP != "" {
@@ -276,7 +281,7 @@ func GetSNPInfo(apos int, g gene.Gene, alt string) gene.SNPinfo {
 		Start: g.Start, End: g.End, CodonNbrInG: codonNbrInG, AltCodon: altCodon,
 		AltAA: aaAlt, RefAAShort: aaRefShort, AltAAShort: aaAltShort,
 		Mutation: mut, CCodonNbrInG: CCodonNbrInG, CPosInGene: CPosInGene, Tang: tang_idx, Alt: alt,
-		Note: g.Note, ReportType: locReportType}
+		Note: g.Note, ReportType: locReportType, ProteinID: g.ProteinID, GeneID: g.GeneID}
 	// fmt.Printf("%v\t%v\n", aaRefShort, aaAltShort)
 	// fmt.Printf("pig:%v, pic:%v, codon:%v %v%v\n", posInGene, posInCodonG, codon, aaRef, codonNbrInG)
 	return snp
@@ -404,6 +409,7 @@ func ReadGBFile(file string) (g []gene.Gene, genomeSplice []string) {
 		for _, gname_match := range gene_name.FindAllStringSubmatch(val, -1) {
 			// fmt.Printf("g:%v\n", gname_match[1])
 			lName = gname_match[1]
+
 		}
 		for _, product_match := range product.FindAllStringSubmatch(val, -1) {
 			// fmt.Printf("p:%v\n", product_match[1])
@@ -422,6 +428,9 @@ func ReadGBFile(file string) (g []gene.Gene, genomeSplice []string) {
 		for _, note_match := range Note.FindAllStringSubmatch(val, -1) {
 			// fmt.Printf("p:%v\n", product_match[1])
 			lNote = note_match[1]
+		}
+		if lName == "" {
+			lName = lLoc
 		}
 
 		g := gene.Gene{Start: lStart, End: lEnd, Locus: lLoc, Direction: lDir,
@@ -546,14 +555,13 @@ func CodonReverse(codon string) string {
 
 //
 
-func ParserVCF(f string, genes []gene.Gene) []gene.SNPinfo {
-	var vcf = regexp.MustCompile(`(^\S+)\W(\d+)\W+(\w+)\W+(\w+)`)
+func ParserVCF(f string, print bool, genes []gene.Gene) []gene.SNPinfo {
+	var vcf = regexp.MustCompile(`^\S+\s+(\d+)\W+(\w+)\s+(\w+)`)
+	// var vcf = regexp.MustCompile(`(^\S+)\W(\d+)\W+(\w+)\W+(\w+)`)
+
+	//
 	var snpFromVCF []gene.SNPinfo
 	// x := make(map[string][]gene.SNPinfo)
-
-	// var result string
-	//^\S+\W(\d+)\W+(\w+)\W+(\w+)
-	// var check_vcf = regexp.MustCompile(`##fileformat=(VCF)`)
 
 	file, err := os.Open(f)
 	if err != nil {
@@ -563,26 +571,27 @@ func ParserVCF(f string, genes []gene.Gene) []gene.SNPinfo {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		// for _, match_check := range check_vcf.FindAllStringSubmatch(scanner.Text(), -1) {
-		// 	fmt.Printf("%v\n", match_check[1])
-		// }
-		// // fmt.Println(scanner.Text())
 		for _, match := range vcf.FindAllStringSubmatch(scanner.Text(), -1) {
-			apos, _ := strconv.Atoi(match[2])
-			ref := match[3]
-			alt := match[4]
-
+			apos, _ := strconv.Atoi(match[1])
+			ref := match[2]
+			alt := match[3]
+			// fmt.Printf("%v\n", genes)
 			// orgInfo = GenomeInfo{Organism: match[1]}
 			for _, g := range genes {
+
 				lStart, _ := strconv.Atoi(g.Start)
 				lEnd, _ := strconv.Atoi(g.End)
 
 				if apos >= lStart && apos <= lEnd {
 					snp := GetSNPInfo(apos, g, alt)
-					snpFromVCF = append(snpFromVCF, snp)
+					// br := testing.Benchmark(snp)
+					// fmt.Println(br)
 
 					if len(ref) == 1 && len(alt) == 1 {
-						PrintResults(snp)
+						snpFromVCF = append(snpFromVCF, snp)
+						if print == true {
+							PrintResults(snp)
+						}
 					}
 
 				}
@@ -599,7 +608,7 @@ func ParserVCF(f string, genes []gene.Gene) []gene.SNPinfo {
 }
 
 func About() {
-	fmt.Println("snpMiner3 (alpha) 0.10.17\n(c)V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2017")
+	fmt.Println("\u2BCC ", version, "\u2BCC\n\u00A9 V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2017")
 }
 
 func process(str string) {
@@ -615,11 +624,91 @@ func ListOfVCFFiles() {
 	for _, file := range files {
 		if strings.Contains(file.Name(), ".vcf") {
 			fmt.Printf("\n\n%v:\n\n", file.Name())
-			ParserVCF(file.Name(), AllGenesVal)
+			ParserVCF(file.Name(), true, AllGenesVal)
 
 			// fmt.Println(file.Name())
 		}
 	}
+}
+
+func MakeSeq(typeof string) []SeqInfo {
+
+	var AllPos []int
+	var ResSeq []SeqInfo
+
+	files, err := filepath.Glob("*.vcf")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, file := range files {
+
+		snps := ParserVCF(file, false, AllGenesVal)
+		switch typeof {
+		case "NC":
+			for _, val := range snps {
+				// buffer.WriteString(val.Alt)
+				AllPos = append(AllPos, val.Apos)
+				// fmt.Printf("%v\n", val.Alt)
+			}
+		case "AA":
+
+		}
+
+	}
+	sort.Ints(removeDuplicates(AllPos))
+
+	for _, file := range files {
+		pos := make(map[int]string)
+		var buffer bytes.Buffer
+		buffer.WriteString(fmt.Sprintf(">%v\n", strings.ToUpper(file)))
+		// var buffer bytes.Buffer
+		// fmt.Printf(">%v\n", strings.ToUpper(file))
+		// buffer.WriteString("\n>" + strings.ToUpper(file) + "\n")
+		snps := ParserVCF(file, false, AllGenesVal)
+		switch typeof {
+		case "NC":
+			for _, val := range snps {
+				pos[val.Apos] = val.Alt
+
+			}
+		case "AA":
+
+		}
+
+		for _, allpos := range AllPos {
+			// fmt.Println(i)
+			if pos[allpos] != "" {
+				// fmt.Println(pos[allpos])
+				buffer.WriteString(pos[allpos])
+			} else {
+				// fmt.Println(GetNucFromGenomePos(allpos))
+				buffer.WriteString(GetNucFromGenomePos(allpos))
+			}
+		}
+		ResSeq = append(ResSeq, SeqInfo{Name: file, Seq: buffer.String()})
+
+	}
+	return ResSeq
+}
+
+func removeDuplicates(elements []int) []int {
+	// Use map to record duplicates as we find them.
+	encountered := map[int]bool{}
+	result := []int{}
+
+	for v := range elements {
+		if encountered[elements[v]] == true {
+			// Do not add duplicate.
+		} else {
+			// Record this element as an encountered element.
+			encountered[elements[v]] = true
+			// Append to result slice.
+			result = append(result, elements[v])
+		}
+	}
+	// Return the new slice.
+	return result
 }
 
 func GetInterGen(pos int) {
@@ -641,11 +730,14 @@ func GetInterGen(pos int) {
 
 func PrintResults(snp gene.SNPinfo) {
 	// resFlg
+	// if snp.Mutation == "missense" {
 	switch snp.ReportType {
+
 	case "T1r":
 		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.CPosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
 			snp.RefAAShort, snp.CCodonNbrInG, snp.AltAAShort, snp.Mutation,
 			snp.Tang, snp.Product)
+
 	case "T1f":
 		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.Gpos, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
 			snp.RefAAShort, snp.CodonNbrInG, snp.AltAAShort, snp.Mutation,
@@ -658,11 +750,61 @@ func PrintResults(snp gene.SNPinfo) {
 		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.Gpos, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
 			snp.RefAAShort, snp.CodonNbrInG, snp.AltAAShort, snp.Mutation,
 			snp.Product)
+
 	}
 
-	// loc := string []gene.SNPinfo
+}
 
-	// res[locus] = append(res[locus], snp)
+func PrintWebResults() {
+
+	snps := ParserVCF(*flgVCF, false, AllGenesVal)
+	var htmlTemplate = `
+				<!DOCTYPE html>
+				<html>
+				<table width="100%" cellspacing="0" cellpadding="4" border="1">
+				<tbody>
+			<tr>
+			<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
+			<td>AA</td><td>Type</td><td>Product</td><td>GeneID</td><td>ProteinID</td>
+			</tr>	
+			{{range $element := .}}
+			<tr>
+			<td>{{.Locus}}</td><td>{{.Name}}</td><td>{{.Apos}}</td><td>{{.CPosInGene}}{{.NucInPos}}>{{.Alt}}</td>
+			<td>{{.RefCodon}}/{{.AltCodon}}</td><td>{{.RefAAShort}}{{.CCodonNbrInG}}{{.AltAAShort}}</td>
+			<td>{{.Mutation}}</td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}">{{.Product}}</a></td><td><a href="https://www.ncbi.nlm.nih.gov/gene/{{.GeneID}}">{{.GeneID}}</a>
+			</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score">{{.ProteinID}}</td>
+			</tr>
+			{{end}}
+			
+			</tbody>
+			</table>
+			<table width="100%" cellspacing="0" cellpadding="4" border="0">
+			<tr>
+			<td><a href="http://snpminer.ru">Created by snpMiner3</a></td>
+			</tr>
+			</table>
+			`
+
+	t := template.New("t")
+	t, err := t.Parse(htmlTemplate)
+	if err != nil {
+		panic(err)
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		err = t.Execute(w, snps)
+		if err != nil {
+			panic(err)
+		}
+
+	})
+	fmt.Println("Open your Internet Browser at localhost:8080 or 127.0.0.1:8080 to see results.\nTo close programm enter Ctl+C")
+	http.ListenAndServe(":8080", nil)
+	// for val := range tmp {
+	// 	fmt.Printf("%v\n", tmp[val].Locus)
+	// }
+
 }
 
 func ParseSNP(f string) []gene.SNPcheck {
@@ -686,7 +828,7 @@ func ParseSNP(f string) []gene.SNPcheck {
 	for scanner.Scan() {
 
 		for _, matchLMN := range rLMN.FindAllStringSubmatch(scanner.Text(), -1) {
-			snpCheck = gene.SNPcheck{Locus: matchLMN[1], PosInGene: matchLMN[2], Ref: matchLMN[3], Alt: matchLMN[4], Name: matchLMN[5], TypeOf: "LMN"}
+			snpCheck = gene.SNPcheck{Locus: strings.ToUpper(matchLMN[1]), PosInGene: matchLMN[2], Ref: matchLMN[3], Alt: matchLMN[4], Name: matchLMN[5], TypeOf: "LMN"}
 			parsedSNP = append(parsedSNP, snpCheck)
 			// fmt.Printf("%v\n", snpCheck)
 			// fmt.Printf("%v %v %v %v %v\n", strings.ToUpper(match[1]), match[2], strings.ToUpper(match[3]), strings.ToUpper(match[4]), match[5])
@@ -698,13 +840,13 @@ func ParseSNP(f string) []gene.SNPcheck {
 			// fmt.Printf("%v %v %v %v %v\n", strings.ToUpper(match[1]), match[2], strings.ToUpper(match[3]), strings.ToUpper(match[4]), match[5])
 		}
 		for _, matchLSAAN := range rLSAAN.FindAllStringSubmatch(scanner.Text(), -1) {
-			snpCheck = gene.SNPcheck{Locus: matchLSAAN[1], AASref: matchLSAAN[2], PosInGene: matchLSAAN[3], AASalt: matchLSAAN[4], Name: matchLSAAN[5], TypeOf: "LSAAN"}
+			snpCheck = gene.SNPcheck{Locus: strings.ToUpper(matchLSAAN[1]), AASref: matchLSAAN[2], PosInGene: matchLSAAN[3], AASalt: matchLSAAN[4], Name: matchLSAAN[5], TypeOf: "LSAAN"}
 			parsedSNP = append(parsedSNP, snpCheck)
 			// fmt.Printf("%v\n", snpCheck)
 			// fmt.Printf("%v %v %v %v %v\n", strings.ToUpper(match[1]), match[2], strings.ToUpper(match[3]), strings.ToUpper(match[4]), match[5])
 		}
 		for _, matchLLAAN := range rLLAAN.FindAllStringSubmatch(scanner.Text(), -1) {
-			snpCheck = gene.SNPcheck{Locus: matchLLAAN[1], AALref: matchLLAAN[2], PosInGene: matchLLAAN[3], AALalt: matchLLAAN[4], Name: matchLLAAN[5], TypeOf: "LSAAN"}
+			snpCheck = gene.SNPcheck{Locus: strings.ToUpper(matchLLAAN[1]), AALref: matchLLAAN[2], PosInGene: matchLLAAN[3], AALalt: matchLLAAN[4], Name: matchLLAAN[5], TypeOf: "LSAAN"}
 			parsedSNP = append(parsedSNP, snpCheck)
 			// fmt.Printf("%v\n", snpCheck)
 			// fmt.Printf("%v %v %v %v %v\n", strings.ToUpper(match[1]), match[2], strings.ToUpper(match[3]), strings.ToUpper(match[4]), match[5])
