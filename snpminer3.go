@@ -128,6 +128,52 @@ func main() {
 			for _, val := range seq {
 				fmt.Println(val.Seq)
 			}
+
+		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == true && *flgMakeSeq == "NC" {
+			seq := MakeSeq("NC")
+			var htmlTemplate = `
+				<!DOCTYPE html>
+				<html>
+				<head>
+				<style>
+   .col { 
+    word-wrap: break-word; /* Перенос слов */ 
+   }
+   </style>
+   </head>
+			<body>
+			  <div class="col">
+			{{range $element := .}}
+	
+			<p>{{.Seq}}</p>
+						{{end}}
+			</div>
+			</body>
+			
+			
+			`
+
+			t := template.New("t")
+			t, err := t.Parse(htmlTemplate)
+			if err != nil {
+				panic(err)
+			}
+
+			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+				err = t.Execute(w, seq)
+				if err != nil {
+					panic(err)
+				}
+
+			})
+			fmt.Println("Open your Internet Browser at localhost:8080 or 127.0.0.1:8080 to see results.\nTo close programm enter Ctl+C")
+			http.ListenAndServe(":8080", nil)
+
+			// for _, val := range seq {
+			// 	fmt.Println(val.Seq)
+			// }
+
 		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "AA" {
 			MakeSeq("AA")
 		}
@@ -672,21 +718,37 @@ func MakeSeq(typeof string) []SeqInfo {
 				pos[val.Apos] = val.Alt
 
 			}
-		case "AA":
-
-		}
-
-		for _, allpos := range AllPos {
-			// fmt.Println(i)
-			if pos[allpos] != "" {
-				// fmt.Println(pos[allpos])
-				buffer.WriteString(pos[allpos])
-			} else {
-				// fmt.Println(GetNucFromGenomePos(allpos))
-				buffer.WriteString(GetNucFromGenomePos(allpos))
+			for _, allpos := range AllPos {
+				// fmt.Println(i)
+				if pos[allpos] != "" {
+					// fmt.Println(pos[allpos])
+					buffer.WriteString(pos[allpos])
+				} else {
+					// fmt.Println(GetNucFromGenomePos(allpos))
+					buffer.WriteString(GetNucFromGenomePos(allpos))
+				}
 			}
+			ResSeq = append(ResSeq, SeqInfo{Name: file, Seq: buffer.String()})
+
+		case "AA":
+			// for _, val := range snps {
+			// 	_, pos[val.Apos] = amino.Codon2AA(val.AltCodon)
+
+			// }
+			// for _, allpos := range AllPos {
+			// 	// fmt.Println(i)
+			// 	if pos[allpos] != "" {
+			// 		// fmt.Println(pos[allpos])
+			// 		buffer.WriteString(pos[allpos])
+			// 	} else {
+			// 		// fmt.Println(GetNucFromGenomePos(allpos))
+			// 		_, refAA = amino.Codon2AA(val.AltCodon)
+			// 		buffer.WriteString(GetNucFromGenomePos(refAA))
+			// 	}
+			// }
+			// ResSeq = append(ResSeq, SeqInfo{Name: file, Seq: buffer.String()})
+
 		}
-		ResSeq = append(ResSeq, SeqInfo{Name: file, Seq: buffer.String()})
 
 	}
 	return ResSeq
