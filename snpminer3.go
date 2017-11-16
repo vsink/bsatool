@@ -124,7 +124,8 @@ func main() {
 		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "" && *flgUniq == false {
 			ListOfVCFFiles()
 		} else if *flgVCF != "" && *flgVCF != "list" && *flgWeb == true && *flgMakeSeq == "" {
-			PrintWebResults()
+			snps := ParserVCF(*flgVCF, false, AllGenesVal)
+			PrintWebResults(snps)
 		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "NC" && *flgUniq == false {
 			seq := MakeSeq("NC")
 			for _, val := range seq {
@@ -178,7 +179,7 @@ func main() {
 
 		} else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgMakeSeq == "AA" && *flgUniq == false {
 			MakeSeq("AA")
-		} else if *flgVCF == "list" && *flgWeb == false && *flgUniq == true {
+		} else if *flgVCF == "list" && *flgUniq == true {
 			GetUniqSNP()
 		}
 
@@ -838,9 +839,8 @@ func PrintResults(snp gene.SNPinfo) {
 
 }
 
-func PrintWebResults() {
+func PrintWebResults(snps []gene.SNPinfo) {
 
-	snps := ParserVCF(*flgVCF, false, AllGenesVal)
 	var htmlTemplate = `
 				<!DOCTYPE html>
 				<html>
@@ -947,8 +947,9 @@ func ParseSNP(f string) []gene.SNPcheck {
 
 func GetUniqSNP() {
 	var countSNPs int
-	pos := make(map[int]int)
+	var snpToWeb []gene.SNPinfo
 	var uniq []UniqInfo
+	pos := make(map[int]int)
 	files, err := filepath.Glob("*.vcf")
 
 	if err != nil {
@@ -961,6 +962,7 @@ func GetUniqSNP() {
 		for _, val := range snps {
 			pos[val.Apos] = pos[val.Apos] + 1
 			uniq = append(uniq, UniqInfo{Apos: val.Apos, Count: pos[val.Apos], Alt: val.Alt})
+			snpToWeb = append(snpToWeb, val)
 			// buffer.WriteString(val.Alt)
 			// fmt.Println(val.Apos)
 			// fmt.Printf("%v\n", val.Alt)
@@ -977,8 +979,11 @@ func GetUniqSNP() {
 				if val.Apos >= lStart && val.Apos <= lEnd {
 					countSNPs++
 					snp := GetSNPInfo(val.Apos, g, val.Alt)
-					PrintResults(snp)
 
+					PrintResults(snp)
+					if *flgWeb == true {
+						PrintWebResults(snpToWeb)
+					}
 				}
 
 			}
