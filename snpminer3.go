@@ -43,7 +43,7 @@ import (
 const (
 	version = "snpMiner3 0.17.11a"
 	list    = "list"
-	NC      = "NC"
+	ncFlag  = "NC"
 )
 
 var linesFromGB []string             // массив строк считанных из файла genbank
@@ -70,6 +70,7 @@ var flgSNP = flag.String("snp", "", "Файл с известными SNP, ко�
 var flgWeb = flag.Bool("web", false, "Режим вывода результатов в Веб браузер")             // вывод результатов в браузер
 var flgUniq = flag.Bool("uniq", false, "Поиск общих, для всех vcf файлов в папке, СНИПОВ") // поиск общих снипов для всех Vcf файлов в папке
 var flgIndel = flag.Bool("indel", false, "Поиск ИнДелов")
+var flgWithRef = flag.Bool("ref", false, "Создавать референсную последовательность при использовании команды -mkseq")
 
 type seqInfo struct {
 	Name, Seq string
@@ -124,12 +125,12 @@ func main() {
 			printWebResults(snps)
 		case *flgVCF == list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "" && *flgUniq == false:
 			listOfVCFFiles()
-		case *flgVCF == list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == NC && *flgUniq == false:
-			seq := makeSeq(NC)
+		case *flgVCF == list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == ncFlag && *flgUniq == false:
+			seq := makeSeq(ncFlag)
 			for _, val := range seq {
 				fmt.Println(val.Seq)
 			}
-		case *flgVCF == list && *flgVCF != "" && *flgWeb == true && *flgmakeSeq == NC && *flgUniq == false:
+		case *flgVCF == list && *flgVCF != "" && *flgWeb == true && *flgmakeSeq == ncFlag && *flgUniq == false:
 			createNCWebServer()
 			// for _, val := range seq {
 			// 	fmt.Println(val.Seq)
@@ -676,7 +677,7 @@ func makeSeq(typeof string) []seqInfo {
 
 		snps := parserVCF(file, false, allGenesVal)
 		switch typeof {
-		case NC:
+		case ncFlag:
 			for _, val := range snps {
 				// buffer.WriteString(val.Alt)
 				AllPos = append(AllPos, val.Apos)
@@ -688,18 +689,18 @@ func makeSeq(typeof string) []seqInfo {
 
 	}
 	sort.Ints(removeDuplicates(AllPos))
-
-	switch typeof {
-	case NC:
-		var refBuffer bytes.Buffer
-		refBuffer.WriteString(fmt.Sprintf(">%v\n", "REFERENCE"))
-		for _, allpos := range AllPos {
-			refBuffer.WriteString(getNucFromGenomePos(allpos))
+	if *flgWithRef == true {
+		switch typeof {
+		case ncFlag:
+			var refBuffer bytes.Buffer
+			refBuffer.WriteString(fmt.Sprintf(">%v\n", "REFERENCE"))
+			for _, allpos := range AllPos {
+				refBuffer.WriteString(getNucFromGenomePos(allpos))
+			}
+			ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String()})
+			// fmt.Println(ResSeq)
 		}
-		ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String()})
-		// fmt.Println(ResSeq)
 	}
-
 	for _, file := range files {
 		pos := make(map[int]string)
 		var buffer bytes.Buffer
@@ -710,7 +711,7 @@ func makeSeq(typeof string) []seqInfo {
 		// buffer.WriteString("\n>" + strings.ToUpper(file) + "\n")
 		snps := parserVCF(file, false, allGenesVal)
 		switch typeof {
-		case NC:
+		case ncFlag:
 			for _, val := range snps {
 				pos[val.Apos] = val.Alt
 
@@ -968,7 +969,7 @@ func getUniqSNP() {
 }
 
 func createNCWebServer() {
-	seq := makeSeq(NC)
+	seq := makeSeq(ncFlag)
 	var htmlTemplate = `
 <!DOCTYPE html>
 <html>
