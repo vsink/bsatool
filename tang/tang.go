@@ -89,7 +89,6 @@ func GetTangInx(refAA string, altAA string) string {
 	Tang["DH"] = "0.560"
 	Tang["RM"] = "0.470"
 	Tang["DY"] = "0.241"
-
 	Tang["TS"] = "2.490"
 	Tang["PQ"] = "1.377"
 	Tang["AE"] = "0.906"
@@ -143,6 +142,7 @@ func GetTangInx(refAA string, altAA string) string {
 	Tang["IN"] = "0.321"
 	Tang["AT"] = "1.587"
 	Tang["ND"] = "1.015"
+	Tang["AD"] = "0.156"
 	Tang["LS"] = "0.725"
 	Tang["GR"] = "0.534"
 	Tang["WC"] = "0.271"
