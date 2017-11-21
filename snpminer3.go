@@ -40,31 +40,36 @@ import (
 	"path/filepath"
 )
 
-const version = "snpMiner3 (alpha) 0.17.11"
+const (
+	version = "snpMiner3 0.17.11a"
+	list    = "list"
+	NC      = "NC"
+)
 
 var linesFromGB []string             // массив строк считанных из файла genbank
 var genomeAnchors = map[int]string{} // карта резльтатов парсинга генбанк-файла
 var totalCDSFound int                // количество найденных CDS
 var allGenesVal []gene.Gene          // массив информации об генах, загруженный из файла базы данных
 
-var flgMkDB = flag.Bool("mkdb", false, "Create database from genbank file") // флаг создания базы данных
-var flgGBfile = flag.String("gb", "", "Genbank file")                       // генбанк файл
-var flgabout = flag.Bool("v", false, "about")                               // о программе
+var flgMkDB = flag.Bool("mkdb", false, "Создание файла локальной базы данных") // флаг создания базы данных
+var flgGBfile = flag.String("gb", "", "Genbank файл")                          // генбанк файл
+var flgabout = flag.Bool("v", false, "О программе")                            // о программе
 
-var flgOut = flag.String("out", "", "database filename") // выходной файл базы данных при парсинге файла генбанка
-var flgDB = flag.String("db", "", "database file")       // файл основной базы данных
-var flgVCF = flag.String("vcf", "", "vcf file")          // файл vcf, с параметром=list все файлы в директории
-var flgPos = flag.Int("pos", 0, "Position of SNP")
-var flgDebug = flag.Bool("debug", false, "") // режим отладки
-var flgGenomeMap = flag.Bool("gmap", false, "")
-var flgmakeSeq = flag.String("mkseq", "", "NC or AA") // сгенерировать синтетическую последовательность
-var flgTang = flag.Bool("tang", false, "")            // индекс танга
-var flgDevMode = flag.Bool("dev", false, "")
-var flgReportType = flag.String("rep", "", "")
-var flgSNP = flag.String("snp", "", "flag snp")
-var flgWeb = flag.Bool("web", false, "")   // вывод результатов в браузер
-var flgUniq = flag.Bool("uniq", false, "") // поиск общих снипов для всех Vcf файлов в папке
-var flgIndel = flag.Bool("indel", false, "")
+var flgOut = flag.String("out", "", "Имя локальной базы данных") // выходной файл базы данных при парсинге файла генбанка
+var flgDB = flag.String("db", "", "Файл локальной базы данных")  // файл основной базы данных
+var flgVCF = flag.String("vcf", "", "vcf файл")                  // файл vcf, с параметром=list все файлы в директории
+var flgPos = flag.Int("pos", 0, "SNP-позиция")
+var flgDebug = flag.Bool("debug", false, "Режим отладки") // режим отладки
+var flgGenomeMap = flag.Bool("gmap", false, "Карта генома")
+var flgmakeSeq = flag.String("mkseq", "", "NC или AA") // сгенерировать синтетическую последовательность
+var flgTang = flag.Bool("tang", false, "Индек Танга")  // индекс танга
+// var flgDevMode = flag.Bool("dev", false, "")
+
+// var flgReportType = flag.String("rep", "", "")
+var flgSNP = flag.String("snp", "", "Файл с известными SNP, которые необходимо проверить")
+var flgWeb = flag.Bool("web", false, "Режим вывода результатов в Веб браузер")             // вывод результатов в браузер
+var flgUniq = flag.Bool("uniq", false, "Поиск общих, для всех vcf файлов в папке, СНИПОВ") // поиск общих снипов для всех Vcf файлов в папке
+var flgIndel = flag.Bool("indel", false, "Поиск ИнДелов")
 
 type seqInfo struct {
 	Name, Seq string
@@ -111,147 +116,33 @@ func main() {
 
 		// 	fmt.Println("Reserved!")
 		// }
-
-		if *flgVCF != "list" {
-			if *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "" {
-				parserVCF(*flgVCF, true, allGenesVal)
-			} else if *flgVCF != "" && *flgWeb == true && *flgmakeSeq == "" {
-				snps := parserVCF(*flgVCF, false, allGenesVal)
-				printWebResults(snps)
+		switch {
+		case *flgVCF != list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "":
+			parserVCF(*flgVCF, true, allGenesVal)
+		case *flgVCF != list && *flgVCF != "" && *flgWeb == true && *flgmakeSeq == "":
+			snps := parserVCF(*flgVCF, false, allGenesVal)
+			printWebResults(snps)
+		case *flgVCF == list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "" && *flgUniq == false:
+			listOfVCFFiles()
+		case *flgVCF == list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == NC && *flgUniq == false:
+			seq := makeSeq(NC)
+			for _, val := range seq {
+				fmt.Println(val.Seq)
 			}
-		} else if *flgVCF == "list" {
-			if *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "" && *flgUniq == false {
-				listOfVCFFiles()
-			} else if *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "NC" && *flgUniq == false {
-				seq := makeSeq("NC")
-				for _, val := range seq {
-					fmt.Println(val.Seq)
-				}
-
-			} else if *flgVCF != "" && *flgWeb == true && *flgmakeSeq == "NC" && *flgUniq == false {
-				seq := makeSeq("NC")
-				var htmlTemplate = `
-					<!DOCTYPE html>
-					<html>
-					<head>
-					<style>
-	   .col {
-	    word-wrap: break-word; /* Перенос слов */
-	   }
-	   </style>
-	   </head>
-				<body>
-				  <div class="col">
-				{{range $element := .}}
-
-				<p>{{.Seq}}</p>
-							{{end}}
-				</div>
-				</body>
-
-
-				`
-
-				t := template.New("t")
-				t, err := t.Parse(htmlTemplate)
-				if err != nil {
-					panic(err)
-				}
-
-				http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-
-					err = t.Execute(w, seq)
-					if err != nil {
-						panic(err)
-					}
-
-				})
-				fmt.Println("Open your Internet Browser at localhost:8080 or 127.0.0.1:8080 to see results.\nTo close programm enter Ctl+C")
-				http.ListenAndServe(":8080", nil)
-
-				// for _, val := range seq {
-				// 	fmt.Println(val.Seq)
-				// }
-
-			} else if *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "AA" && *flgUniq == false {
-				makeSeq("AA")
-			} else if *flgUniq == true {
-				getUniqSNP()
-			}
-		}
-
-		// if *flgVCF != "" && *flgVCF != "list" && *flgWeb == false && *flgmakeSeq == "" {
-		//
-		// 	parserVCF(*flgVCF, true, allGenesVal)
-		//
-		// } else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgmakeSeq == "" && *flgUniq == false {
-		// 	listOfVCFFiles()
-		// } else if *flgVCF != "" && *flgVCF != "list" && *flgWeb == true && *flgmakeSeq == "" {
-		// 	snps := parserVCF(*flgVCF, false, allGenesVal)
-		// 	printWebResults(snps)
-		// } else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgmakeSeq == "NC" && *flgUniq == false {
-		// 	seq := makeSeq("NC")
-		// 	for _, val := range seq {
-		// 		fmt.Println(val.Seq)
-		// 	}
-		//
-		// } else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == true && *flgmakeSeq == "NC" && *flgUniq == false {
-		// 	seq := makeSeq("NC")
-		// 	var htmlTemplate = `
-		// 		<!DOCTYPE html>
-		// 		<html>
-		// 		<head>
-		// 		<style>
-		// .col {
-		//  word-wrap: break-word; /* Перенос слов */
-		// }
-		// </style>
-		// </head>
-		// 	<body>
-		// 	  <div class="col">
-		// 	{{range $element := .}}
-		//
-		// 	<p>{{.Seq}}</p>
-		// 				{{end}}
-		// 	</div>
-		// 	</body>
-		//
-		//
-		// 	`
-		//
-		// 	t := template.New("t")
-		// 	t, err := t.Parse(htmlTemplate)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		//
-		// 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		//
-		// 		err = t.Execute(w, seq)
-		// 		if err != nil {
-		// 			panic(err)
-		// 		}
-		//
-		// 	})
-		// 	fmt.Println("Open your Internet Browser at localhost:8080 or 127.0.0.1:8080 to see results.\nTo close programm enter Ctl+C")
-		// 	http.ListenAndServe(":8080", nil)
-		//
-		// 	// for _, val := range seq {
-		// 	// 	fmt.Println(val.Seq)
-		// 	// }
-		//
-		// } else if *flgVCF != "" && *flgVCF == "list" && *flgWeb == false && *flgmakeSeq == "AA" && *flgUniq == false {
-		// 	makeSeq("AA")
-		// } else if *flgVCF == "list" && *flgUniq == true {
-		// 	getUniqSNP()
-		// }
-
-		if *flgSNP != "" {
+		case *flgVCF == list && *flgVCF != "" && *flgWeb == true && *flgmakeSeq == NC && *flgUniq == false:
+			createNCWebServer()
+			// for _, val := range seq {
+			// 	fmt.Println(val.Seq)
+			// }
+		case *flgVCF == list && *flgVCF != "" && *flgWeb == false && *flgmakeSeq == "AA" && *flgUniq == false:
+			makeSeq("AA")
+		case *flgVCF == list && *flgUniq == true:
+			getUniqSNP()
+		case *flgSNP != "":
 			locSNPcheck := parseSNP(*flgSNP)
 			for _, val := range locSNPcheck {
 				fmt.Printf("%v %v %v \n", val.Locus, val.Name, val.TypeOf)
 			}
-
 		}
 
 		if *flgGenomeMap != false {
@@ -748,7 +639,7 @@ func parserVCF(f string, print bool, genes []gene.Gene) []gene.SNPinfo {
 }
 
 func about() {
-	fmt.Println("\u2BCC ", version, "\u2BCC\n\u00A9 V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2017")
+	fmt.Println(strings.Repeat(".", 50), "\n", version, "\n", strings.Repeat(".", 50), "\n\u00A9 V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2017")
 }
 
 func process(str string) {
@@ -785,7 +676,7 @@ func makeSeq(typeof string) []seqInfo {
 
 		snps := parserVCF(file, false, allGenesVal)
 		switch typeof {
-		case "NC":
+		case NC:
 			for _, val := range snps {
 				// buffer.WriteString(val.Alt)
 				AllPos = append(AllPos, val.Apos)
@@ -798,21 +689,34 @@ func makeSeq(typeof string) []seqInfo {
 	}
 	sort.Ints(removeDuplicates(AllPos))
 
+	switch typeof {
+	case NC:
+		var refBuffer bytes.Buffer
+		refBuffer.WriteString(fmt.Sprintf(">%v\n", "REFERENCE"))
+		for _, allpos := range AllPos {
+			refBuffer.WriteString(getNucFromGenomePos(allpos))
+		}
+		ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String()})
+		// fmt.Println(ResSeq)
+	}
+
 	for _, file := range files {
 		pos := make(map[int]string)
 		var buffer bytes.Buffer
+
 		buffer.WriteString(fmt.Sprintf(">%v\n", strings.ToUpper(file)))
 		// var buffer bytes.Buffer
 		// fmt.Printf(">%v\n", strings.ToUpper(file))
 		// buffer.WriteString("\n>" + strings.ToUpper(file) + "\n")
 		snps := parserVCF(file, false, allGenesVal)
 		switch typeof {
-		case "NC":
+		case NC:
 			for _, val := range snps {
 				pos[val.Apos] = val.Alt
 
 			}
 			for _, allpos := range AllPos {
+
 				// fmt.Println(i)
 				if pos[allpos] != "" {
 					// fmt.Println(pos[allpos])
@@ -823,6 +727,7 @@ func makeSeq(typeof string) []seqInfo {
 				}
 			}
 			ResSeq = append(ResSeq, seqInfo{Name: file, Seq: buffer.String()})
+			// ResSeq = append(ResSeq, seqInfo{Name: "REFERENCE", Seq: refBuffer.String()})
 
 		case "AA":
 			// for _, val := range snps {
@@ -942,7 +847,7 @@ func printWebResults(snps []gene.SNPinfo) {
 		}
 
 	})
-	fmt.Println("Open your Internet Browser at localhost:8080 or 127.0.0.1:8080 to see results.\nTo close programm enter Ctl+C")
+	fmt.Println("Откройте в интернет браузере адрес localhost:8080 или 127.0.0.1:8080 для просмотра результатов.\nДля выхода из программы, нажмите Ctl+C")
 	http.ListenAndServe(":8080", nil)
 	// for val := range tmp {
 	// 	fmt.Printf("%v\n", tmp[val].Locus)
@@ -1047,6 +952,7 @@ func getUniqSNP() {
 
 						printWebResults(snpToWeb)
 					} else {
+
 						printResults(snp)
 					}
 				}
@@ -1059,4 +965,47 @@ func getUniqSNP() {
 	if *flgDebug == true {
 		fmt.Printf("files:%v snps: %v\n%v\n", len(files), countSNPs, files)
 	}
+}
+
+func createNCWebServer() {
+	seq := makeSeq(NC)
+	var htmlTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+.col {
+word-wrap: break-word; /* Перенос слов */
+}
+</style>
+</head>
+<body>
+<div class="col">
+{{range $element := .}}
+
+<p>{{.Seq}}</p>
+		{{end}}
+</div>
+</body>
+
+
+`
+
+	t := template.New("t")
+	t, err := t.Parse(htmlTemplate)
+	if err != nil {
+		panic(err)
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		err = t.Execute(w, seq)
+		if err != nil {
+			panic(err)
+		}
+
+	})
+	fmt.Println("Откройте в интернет браузере адрес localhost:8080 или 127.0.0.1:8080 для просмотра результатов.\nДля выхода из программы, нажмите Ctl+C")
+	http.ListenAndServe(":8080", nil)
+
 }
