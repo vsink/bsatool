@@ -37,6 +37,7 @@ import (
 	// "net/http"
 	// "github.com/davecgh/go-spew/spew"
 	// tm "github.com/buger/goterm"
+	"gopkg.in/cheggaaa/pb.v2"
 	"html/template"
 	"path/filepath"
 )
@@ -51,6 +52,7 @@ const (
 	tLSAAN  = "LSAAN"
 	tLLAAN  = "LLAAN"
 	vcfExt  = "*.vcf"
+	pbtmpl  = `{{counters . }}{{ bar . "⎜" "agtc"  "⬤" "TCAG" "⎜"}}{{percent . }}{{rtime . "ETA %s"}}`
 )
 
 // type SNP interface {
@@ -89,7 +91,7 @@ type seqInfo struct {
 }
 
 type uniqInfo struct {
-	Apos, Count int
+	APos, Count int
 	Alt         string
 }
 type uniqInfoTest struct {
@@ -191,7 +193,7 @@ func main() {
 						// fmt.Printf(getSNPInfo(*flgPos, g))
 						snp := getSNPInfo(*flgPos, g, "A")
 						fmt.Printf("apos:%v, gpos:%v, pic:%v, AA:%v, ref:%v, nuc:%v, dir:%v, aa:%v\nL:%v, S:%v, E:%v, P:%v\n",
-							snp.Apos, snp.Gpos, snp.PosInCodonG, snp.CodonNbrInG, snp.RefCodon, snp.NucInPos, g.Direction,
+							snp.APos, snp.PosInGene, snp.PosInCodonG, snp.CodonNbrInG, snp.RefCodon, snp.NucInPos, g.Direction,
 							snp.RefAA, snp.Locus, snp.Start, snp.End, snp.Product)
 
 					}
@@ -253,6 +255,8 @@ func getSNPInfo(apos int, g gene.Gene, alt string) gene.SNPinfo {
 		alt = codonReverse(alt)
 		nucG = codonReverse(nucG)
 		codon = codonReverse(codon)
+		posInGene = CPosInGene
+		codonNbrInG = CCodonNbrInG
 		// fmt.Printf("alt:%v codon:%v alt_r:%v rev_codon:%v\n", alt, codon, codonReverse(alt), codonReverse(codon))
 		if posInCodonG == 2 {
 			posInCodonG = 0
@@ -286,22 +290,18 @@ func getSNPInfo(apos int, g gene.Gene, alt string) gene.SNPinfo {
 	// 	fmt.Printf("!!!%v\t%v\t%v\t%v\t%v\t%v\t%v\n", g.Locus, apos, nucG, alt, g.Direction, codon, altCodon)
 	// }
 	// }
-	if *flgTang == true && g.Direction == "r" {
-		locReportType = "T1r"
-	} else if *flgTang == true && g.Direction == "f" {
-		locReportType = "T1f"
-	} else if *flgTang == false && g.Direction == "r" {
-		locReportType = "T0r"
-	} else if *flgTang == false && g.Direction == "f" {
-		locReportType = "T0f"
+	if *flgTang == true {
+		locReportType = "T1"
+	} else if *flgTang == false {
+		locReportType = "T0"
 	}
 	tang.GetTangInx(aaRefShort, aaAltShort)
-	snp = gene.SNPinfo{Apos: apos, Gpos: posInGene, PosInCodonG: posInCodonG,
+	snp = gene.SNPinfo{APos: apos, PosInGene: posInGene, PosInCodonG: posInCodonG,
 		RefCodon: codon, RefAA: aaRef, NucInPos: strings.ToUpper(nucG), Locus: g.Locus,
 		Direction: g.Direction, Name: g.Name, Product: g.Product,
 		Start: g.Start, End: g.End, CodonNbrInG: codonNbrInG, AltCodon: altCodon,
 		AltAA: aaAlt, RefAAShort: aaRefShort, AltAAShort: aaAltShort,
-		Mutation: mut, CCodonNbrInG: CCodonNbrInG, CPosInGene: CPosInGene, Tang: tangIdx, Alt: alt,
+		Mutation: mut, Tang: tangIdx, Alt: alt,
 		Note: g.Note, ReportType: locReportType, ProteinID: g.ProteinID, GeneID: g.GeneID}
 	// fmt.Printf("%v\t%v\n", aaRefShort, aaAltShort)
 	// fmt.Printf("pig:%v, pic:%v, codon:%v %v%v\n", posInGene, posInCodonG, codon, aaRef, codonNbrInG)
@@ -667,6 +667,7 @@ func listOfVCFFiles() {
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
+
 	files := getListofVCF()
 	for _, file := range files {
 		if strings.Contains(file, ".vcf") {
@@ -682,22 +683,30 @@ func makeSeq(typeof string) []seqInfo {
 
 	var AllPos []int
 	var ResSeq []seqInfo
-	var i int
+	// var i int
 	// files, err := filepath.Glob(vcfExt)
 	files := getListofVCF()
+	// bar := pb.StartNew(len(files))
+	bar := pb.ProgressBarTemplate(pbtmpl).Start(len(files))
+	bar.SetWidth(90)
+	// `{{counters . }}{{ bar . "<" "𝌅" (rnd "✀" "✀" "✀" "✀" ) "⦁" ">]"}}{{percent . }}{{rtime . "ETA %s"}}`
+	// `{{string . "prefix"}}{{counters . }} {{bar . }} {{percent . }} {{speed . }}{{string . "suffix"}}`
 
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
+
 	for _, file := range files {
-		i++
-		fmt.Printf("processed %v files\r", i)
+		// i++
+		// fmt.Printf("processed %v files\r", i)
+		bar.SetWidth(90)
+		bar.Increment()
 		snps := parserVCF(file, false, allGenesVal)
 		switch typeof {
 		case ncFlag:
 			for _, val := range snps {
 				// buffer.WriteString(val.Alt)
-				AllPos = append(AllPos, val.Apos)
+				AllPos = append(AllPos, val.APos)
 				// fmt.Printf("%v\n", val.Alt)
 			}
 		case aaFlag:
@@ -705,6 +714,7 @@ func makeSeq(typeof string) []seqInfo {
 		}
 
 	}
+	bar.Finish()
 	sort.Ints(removeDuplicates(AllPos))
 	if *flgWithRef == true {
 		switch typeof {
@@ -730,7 +740,7 @@ func makeSeq(typeof string) []seqInfo {
 		switch typeof {
 		case ncFlag:
 			for _, val := range snps {
-				pos[val.Apos] = val.Alt
+				pos[val.APos] = val.Alt
 
 			}
 			for _, allpos := range AllPos {
@@ -799,21 +809,13 @@ func printResults(snp gene.SNPinfo) {
 	// spew.Dump(snp)
 	switch snp.ReportType {
 
-	case "T1r":
-		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.CPosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
-			snp.RefAAShort, snp.CCodonNbrInG, snp.AltAAShort, snp.Mutation,
-			snp.Tang, snp.Product)
-
-	case "T1f":
-		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.Gpos, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
+	case "T1":
+		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\t%v\n", snp.Locus, snp.APos, snp.PosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
 			snp.RefAAShort, snp.CodonNbrInG, snp.AltAAShort, snp.Mutation,
 			snp.Tang, snp.Product)
-	case "T0r":
-		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.CPosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
-			snp.RefAAShort, snp.CCodonNbrInG, snp.AltAAShort, snp.Mutation,
-			snp.Product)
-	case "T0f":
-		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\n", snp.Locus, snp.Apos, snp.Gpos, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
+
+	case "T0":
+		fmt.Printf("%v\t%v\t%v%v>%v\t%v/%v\t%v%v%v\t%v\t%v\n", snp.Locus, snp.APos, snp.PosInGene, snp.NucInPos, snp.Alt, snp.RefCodon, snp.AltCodon,
 			snp.RefAAShort, snp.CodonNbrInG, snp.AltAAShort, snp.Mutation,
 			snp.Product)
 
@@ -836,8 +838,8 @@ func printWebResults(snps []gene.SNPinfo) {
 			</tr>
 			{{range $element := .}}
 			<tr>
-			<td>{{.Locus}}</td><td>{{.Name}}</td><td>{{.Apos}}</td><td>{{.CPosInGene}}{{.NucInPos}}>{{.Alt}}</td>
-			<td>{{.RefCodon}}/{{.AltCodon}}</td><td>{{.RefAAShort}}{{.CCodonNbrInG}}{{.AltAAShort}}</td>
+			<td>{{.Locus}}</td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
+			<td>{{.RefCodon}}/{{.AltCodon}}</td><td>{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</td>
 			<td>{{.Mutation}}</td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}">{{.Product}}</a></td><td><a href="https://www.ncbi.nlm.nih.gov/gene/{{.GeneID}}">{{.GeneID}}</a>
 			</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score">{{.ProteinID}}</td>
 			</tr>
@@ -881,9 +883,9 @@ func getSNPNotation(f string) []gene.SNPcheck {
 	// LocusMutationName(LMN)
 	rPMLN := regexp.MustCompile(`^(\d+)_(\D)>(\D)\W+(\w+)\W+(.*)`) // APOS:1 REF:2 ALT:3 L:4 NAME:5
 	//PositionMutationLocusName (PMLN)
-	rLSAAN := regexp.MustCompile(`^(\w+)\W+(\D{1})(\d+)(\D{1})\W(.*)`) // L:1 AA_REF:2 POS:3 AA_ALT:4 NAME:5
+	rLSAAN := regexp.MustCompile(`^(\w+)\W+(\D{1})(\d+)(\D{1})\W+(.*)`) // L:1 AA_REF:2 POS:3 AA_ALT:4 NAME:5
 	// LocusShortAminoAcidName (LSAAN)
-	rLLAAN := regexp.MustCompile(`^(\w+)\W+(\w{3})(\d+)(\w{3})\W+(.*)`) // L:1 LAA_REF:2 PiG:3 LAA_ALT:4 NAME:5
+	rLLAAN := regexp.MustCompile(`^(\w+)\W+(\D{3})(\d+)(\D{3})\W+(.*)`) // L:1 LAA_REF:2 PiG:3 LAA_ALT:4 NAME:5
 	// LocusLongAminoAcidName (LLAAN)
 	file, err := os.Open(f)
 	if err != nil {
@@ -901,7 +903,7 @@ func getSNPNotation(f string) []gene.SNPcheck {
 			// fmt.Printf("%v %v %v %v %v\n", strings.ToUpper(match[1]), match[2], strings.ToUpper(match[3]), strings.ToUpper(match[4]), match[5])
 		}
 		for _, matchPMLN := range rPMLN.FindAllStringSubmatch(scanner.Text(), -1) {
-			snpCheck = gene.SNPcheck{Apos: matchPMLN[1], Ref: matchPMLN[2], Alt: matchPMLN[3], Locus: matchPMLN[4], Name: matchPMLN[5], TypeOf: tPMLN, Raw: matchPMLN[0]}
+			snpCheck = gene.SNPcheck{APos: matchPMLN[1], Ref: matchPMLN[2], Alt: matchPMLN[3], Locus: matchPMLN[4], Name: matchPMLN[5], TypeOf: tPMLN, Raw: matchPMLN[0]}
 			parsedSNP = append(parsedSNP, snpCheck)
 			// fmt.Printf("%v\n", snpCheck)
 			// fmt.Printf("%v %v %v %v %v\n", strings.ToUpper(match[1]), match[2], strings.ToUpper(match[3]), strings.ToUpper(match[4]), match[5])
@@ -936,13 +938,18 @@ func getUniqSNP() {
 	var snpToWeb []gene.SNPinfo
 	var snpToConsole []gene.SNPinfo
 	files := getListofVCF()
-	for cnt, file := range files {
-		fmt.Printf("processed %v files\r", cnt+1)
+	// bar := pb.StartNew(len(files))
+	bar := pb.ProgressBarTemplate(pbtmpl).Start(len(files))
+	bar.SetWidth(90)
+	for _, file := range files {
+		// fmt.Printf("processed %v files\r", cnt+1)
+
+		bar.Increment()
 		snps := parserVCF(file, false, allGenesVal)
 
 		for _, val := range snps {
-			pos[val.Apos] = pos[val.Apos] + 1
-			alt[val.Apos] = val
+			pos[val.APos] = pos[val.APos] + 1
+			alt[val.APos] = val
 			// 	g = gene.Gene{Locus: val.Locus, Start: val.Start, End: val.End, Name: val.Name, Product: val.Product, Direction: val.Direction, GeneID: val.GeneID, ProteinID: val.ProteinID}
 			// }
 		}
@@ -997,10 +1004,10 @@ func getUniqSNP() {
 //
 // 		for _, val := range snps {
 //
-// 			pos[val.Apos] = pos[val.Apos] + 1
-// 			uniq = append(uniq, uniqInfo{Apos: val.Apos, Count: pos[val.Apos], Alt: val.Alt})
+// 			pos[val.APos] = pos[val.APos] + 1
+// 			uniq = append(uniq, uniqInfo{APos: val.APos, Count: pos[val.APos], Alt: val.Alt})
 //
-// 			if pos[val.Apos] == len(files) && *flgWeb == true {
+// 			if pos[val.APos] == len(files) && *flgWeb == true {
 // 				snpToWeb = append(snpToWeb, val)
 //
 // 			}
@@ -1009,11 +1016,11 @@ func getUniqSNP() {
 // 	}
 //
 // 	sort.Slice(uniq, func(i int, j int) bool {
-// 		return uniq[i].Apos < uniq[j].Apos
+// 		return uniq[i].APos < uniq[j].APos
 // 	})
 // 	// spew.Dump(uniq)
 // 	sort.Slice(snpToWeb, func(i int, j int) bool {
-// 		return snpToWeb[i].Apos < snpToWeb[j].Apos
+// 		return snpToWeb[i].APos < snpToWeb[j].APos
 // 	})
 //
 // 	for _, g := range allGenesVal {
@@ -1023,9 +1030,9 @@ func getUniqSNP() {
 // 		for _, val := range uniq {
 // 			if val.Count == len(files) {
 //
-// 				if val.Apos >= lStart && val.Apos <= lEnd {
+// 				if val.APos >= lStart && val.APos <= lEnd {
 // 					countSNPs++
-// 					snp := getSNPInfo(val.Apos, g, val.Alt)
+// 					snp := getSNPInfo(val.APos, g, val.Alt)
 //
 // 					if *flgWeb == true {
 //
@@ -1101,6 +1108,7 @@ func getListofVCF() []string {
 	if err != nil {
 		log.Fatal(err)
 	}
+	sort.Strings(files)
 	return files
 }
 
@@ -1114,60 +1122,64 @@ func checkSNPfromFile(f string) {
 	mapOfVCF := make(map[string][]gene.SNPinfo)
 	files := getListofVCF()
 	locSNPcheck := getSNPNotation(f)
-	var i int
 
-	// flgFirstElement bool
+	bar := pb.ProgressBarTemplate(pbtmpl).Start(len(files))
+	bar.SetWidth(90)
 	for _, file := range files {
 		snps := parserVCF(file, false, allGenesVal)
 		mapOfVCF[file] = snps
-		i++
-		fmt.Printf("processed %v files\r", i)
+		bar.Increment()
+		// i++
+		// fmt.Printf("processed %v files\r", i)
 	}
+	bar.Finish()
+	fmt.Println()
 	for file, snp := range mapOfVCF {
 		var buffer bytes.Buffer
 
-		buffer.WriteString(fmt.Sprintf("%v", file))
+		buffer.WriteString(fmt.Sprintf("%v  ", file))
 		for _, val := range locSNPcheck {
+
 			lGpoS, _ := strconv.Atoi(val.PosInGene)
+			CodonNbrInG, _ := strconv.Atoi(val.CodonNbrInG)
+			lAPos, _ := strconv.Atoi(val.APos)
 
 			for _, snpFromFile := range snp {
+
 				switch val.TypeOf {
 				case tLMN:
-					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) && lGpoS == snpFromFile.Gpos {
-						// fmt.Println(val.Locus, "\t", val.PosInGene, "\t", snpFromFile.Gpos, "\t", snpFromFile.Locus)
-						buffer.WriteString(fmt.Sprintf(",%v[%v_%v%v>%v]", val.Name, val.Locus, val.PosInGene, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
-						fmt.Println(strings.ToUpper(buffer.String()))
+
+					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) && lGpoS == snpFromFile.PosInGene {
+						// fmt.Println(val.Locus, "\t", val.PosInGene, "\t", snpFromFile.PosInGene, "\t", snpFromFile.Locus)
+						buffer.WriteString(fmt.Sprintf("  %v[%v:%v%v>%v]", val.Name, val.Locus, val.PosInGene, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+						// fmt.Println(strings.ToUpper(buffer.String()))
 					}
 				case tPMLN:
-					lApos, _ := strconv.Atoi(val.Apos)
-					if lApos == snpFromFile.Apos && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) {
-						buffer.WriteString(fmt.Sprintf(",%v[%v_%v>%v]", snpFromFile.Locus, lApos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
-						fmt.Println(strings.ToUpper(buffer.String()))
+
+					if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) {
+						buffer.WriteString(fmt.Sprintf("  %v[%v:%v_%v>%v]", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+
 					}
 				case tLSAAN:
-					// lApos, _ := strconv.Atoi(val.Apos)
-					var lCodonNbrInG int
 
-					CodonNbrInG, _ := strconv.Atoi(val.CodonNbrInG)
-					if snpFromFile.Direction == "r" {
-						lCodonNbrInG = snpFromFile.CCodonNbrInG
-					} else {
-						lCodonNbrInG = snpFromFile.CodonNbrInG
+					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == snpFromFile.CodonNbrInG &&
+
+						val.AASalt == snpFromFile.AltAAShort {
+
+						buffer.WriteString(fmt.Sprintf("  %v[%v:%v%v%v]", val.Name, val.Locus, val.AASref, CodonNbrInG, val.AASalt))
+					}
+				case tLLAAN:
+
+					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == snpFromFile.CodonNbrInG &&
+						val.AALalt == snpFromFile.AltAA {
+						buffer.WriteString(fmt.Sprintf("  %v[%v:%v%v%v]", val.Name, val.Locus, val.AALref, CodonNbrInG, val.AALalt))
+
 					}
 
-					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == lCodonNbrInG {
-						fmt.Printf("%v%v%v %v %v%v%v->%v\t", val.AASref, CodonNbrInG, val.AASalt, val.Locus, snpFromFile.RefAAShort, lCodonNbrInG, snpFromFile.AltAAShort, snpFromFile.Alt)
-						// spew.Dump(snpFromFile)
-					}
-					// if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && lGpoS == snpFromFile.Gpos && val.AASalt == snpFromFile.AltAAShort {
-					// 	buffer.WriteString(fmt.Sprintf(",%v[%v%v%v]", snpFromFile.Locus, snpFromFile.RefAAShort, lGpoS, snpFromFile.AltAAShort))
-					// fmt.Println(strings.ToUpper(buffer.String()))
-					// }
 				}
 			}
 
-			// fmt.Println(strings.ToUpper(buffer.String()))
 		}
-
+		fmt.Println((buffer.String()))
 	}
 }
