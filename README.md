@@ -1,1 +1,1 @@
-# snpminer3
+# Bacterial Snp Annotation TOOL (BSATOOL)
