@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	// "context"
 	// "testing"
 	// "compress/gzip"
 	"fmt"
@@ -19,9 +20,9 @@ import (
 	// "math/rand"
 	"regexp"
 	// "encoding/json"
+	"flag"
 	"strings"
 	// "time"
-	"flag"
 	// "gopkg.in/alecthomas/kingpin.v2"
 	// "encoding/gob"
 	// "bufio"
@@ -45,17 +46,29 @@ import (
 )
 
 const (
-	version = "snpMiner3 0.30.11a"
-	list    = "list"
-	ncFlag  = "NC"
-	aaFlag  = "AA"
-	tLMN    = "LMN"   //locus:Mutation:NAME
-	tPMLN   = "PMLN"  // position:Mutation:locus:NAME
-	tPMN    = "PMN"   // position:Mutation:NAME
-	tLSAAN  = "LSAAN" //locus:shortAA:codon:shortAA:name
-	tLLAAN  = "LLAAN" // locus:longAA:codon:longAA:name
-	tLCN    = "LCN"   //locus:codon:name
-	vcfExt  = "*.vcf"
+	logo = `
+ _______    ________     __  ___________  ______      ______    ___       
+|   _  "\  /"       )   /""\("     _   ")/    " \    /    " \  |"  |      
+(. |_)  :)(:   \___/   /    \)__/  \\__/// ____  \  // ____  \ ||  |      
+|:     \/  \___  \    /' /\  \  \\_ /  /  /    ) :)/  /    ) :)|:  |      
+(|  _  \\   __/  \\  //  __'  \ |.  | (: (____/ //(: (____/ //  \  |___   
+|: |_)  :) /" \   :)/   /  \\  \\:  |  \        /  \        /  ( \_|:  \  
+(_______/ (_______/(___/    \___)\__|   \"_____/    \"_____/    \_______) 
+                                                                          
+ BSATOOL - Bacterial Snp Annotation TOOL ver.0.5alpha
+ (c) V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2018                                   
+                                                  
+	`
+	list   = "list"
+	ncFlag = "NC"
+	aaFlag = "AA"
+	tLMN   = "LMN"   //locus:Mutation:NAME
+	tPMLN  = "PMLN"  // position:Mutation:locus:NAME
+	tPMN   = "PMN"   // position:Mutation:NAME
+	tLSAAN = "LSAAN" //locus:shortAA:codon:shortAA:name
+	tLLAAN = "LLAAN" // locus:longAA:codon:longAA:name
+	tLCN   = "LCN"   //locus:codon:name
+	vcfExt = "*.vcf"
 	// pbtmpl      = `{{counters . }}{{ bar . "⎜" "agtc"   "⬤" "TCAG" "⎜"}}{{percent . }}{{rtime . " ETA %s  "}}{{speed .}} `
 	lmnRegExp   = `^(\w+)\W+(\d+)(\D)>(\D)\s+(.*)` // LMN Regular expression
 	pmlnRegExp  = `^(\d+)_(\D)>(\D)\W+(\w+)\W+(.*)`
@@ -114,6 +127,7 @@ var genomeSeqSlice []string // информация об генах, загру�
 func main() {
 
 	// парсинг флагов
+	defer os.Exit(0)
 	flag.Parse()
 	// о программе
 	if *flgabout == true {
@@ -282,6 +296,7 @@ func getSNPInfo(apos int, g gene.Gene, alt string) gene.SNPinfo {
 	aaAlt, aaAltShort := amino.Codon2AA(altCodon)
 	if aaRefShort == aaAltShort {
 		mut = "synonymous"
+		tangIdx = "-"
 	} else if aaRefShort != aaAltShort && aaAltShort != "X" {
 		mut = "missense"
 		tangIdx = tang.GetTangInx(aaRefShort, aaAltShort)
@@ -911,7 +926,7 @@ func parserVCF(f string, print bool, genes []gene.Gene) []gene.SNPinfo {
 }
 
 func about() {
-	fmt.Println(strings.Repeat(".", 50), "\n", version, "\n", strings.Repeat(".", 50), "\n\u00A9 V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2017")
+	fmt.Println("\n", logo)
 }
 
 func process(str string) {
@@ -1093,14 +1108,14 @@ func printWebResults(snps []gene.SNPinfo) {
 			{{if .GeneID}}
 			<tr>
 			<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
-			<td>{{.RefCodon}}/{{.AltCodon}}</td><td>{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</td>
+			<td>{{.RefCodon}}/{{.AltCodon}}</td><td><p title="{{.RefAA}}{{.CodonNbrInG}}{{.AltAA}}">{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</p></td>
 			<td><p title="Tang Index: {{.Tang}}">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ncbi.nlm.nih.gov/gene/{{.GeneID}}={{.GeneID}}">{{.GeneID}}</a>
 			</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score">{{.ProteinID}}</td>
 			</tr>
 			{{else}}
 			<tr>
 			<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
-			<td>{{.RefCodon}}/{{.AltCodon}}</td><td>{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</td>
+			<td>{{.RefCodon}}/{{.AltCodon}}</td><td><p title="{{.RefAA}}{{.CodonNbrInG}}{{.AltAA}}">{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</p></td>
 			<td><p title="Tang Index: {{.Tang}}">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}">{{.GOA}}</a>
 			</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score">{{.ProteinID}}</td>
 			</tr>
@@ -1110,7 +1125,7 @@ func printWebResults(snps []gene.SNPinfo) {
 			</table>
 			<table width="100%" cellspacing="0" cellpadding="4" border="0">
 			<tr>
-			<td><a href="http://snpminer.ru">Created by snpMiner3</a></td>
+			<td><a href="http://bsatool.ru">Created by BSATOOL</a></td>
 			</tr>
 			</table>
 			`
@@ -1128,8 +1143,11 @@ func printWebResults(snps []gene.SNPinfo) {
 		panic(err)
 	}
 
+	browser.OpenURL(url)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// err = t.Execute(w, &gInfo)
+
 		err = t1.Execute(w, &gInfo)
 		if err != nil {
 			panic(err)
@@ -1138,19 +1156,12 @@ func printWebResults(snps []gene.SNPinfo) {
 		if err != nil {
 			panic(err)
 		}
-
-		defer os.Exit(0)
+		go func() {
+			defer os.Exit(0)
+		}()
 	})
-	browser.OpenURL(url)
-	// fmt.Println("Для выхода из программы, нажмите Ctl+C")
+
 	http.ListenAndServe(":8080", nil)
-	// log.Fatal(http.ListenAndServe(":8080", nil))
-	// os.Exit(0)
-	// os.Exit(1)
-	// for val := range tmp {
-	// 	fmt.Printf("%v\n", tmp[val].Locus)
-	// }
-	// os.Exit(0)
 
 }
 
@@ -1308,7 +1319,7 @@ word-wrap: break-word; /* Перенос слов */
 
 
 `
-
+	browser.OpenURL(url)
 	t := template.New("t")
 	t, err := t.Parse(htmlTemplate)
 	if err != nil {
@@ -1322,9 +1333,11 @@ word-wrap: break-word; /* Перенос слов */
 			panic(err)
 		}
 
-		// os.Exit(0)
+		go func() {
+			defer os.Exit(0)
+		}()
 	})
-	browser.OpenURL(url)
+
 	http.ListenAndServe(":8080", nil)
 
 	// fmt.Println("Для выхода из программы, нажмите Ctl+C")
