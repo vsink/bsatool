@@ -2130,14 +2130,14 @@ func makeMatrix() {
 			}
 		}
 		headers.WriteString("\n")
-		fOut, err := os.Create(*flgOut)
-		if err != nil {
-			log.Fatal("Cannot create file", err)
-		}
-		defer fOut.Close()
-		fmt.Fprintf(fOut, headers.String())
-		fmt.Fprintf(fOut, buffer.String())
-		fmt.Println("\n\nWell done!\n")
+		// fOut, err := os.Create(*flgOut)
+		// if err != nil {
+		// 	log.Fatal("Cannot create file", err)
+		// }
+		// defer fOut.Close()
+		// fmt.Fprintf(fOut, headers.String())
+		// fmt.Fprintf(fOut, buffer.String())
+		// fmt.Println("\n\nWell done!\n")
 
 	case "nuc":
 		var posFreq = map[int][]string{}
@@ -2176,18 +2176,19 @@ func makeMatrix() {
 
 		}
 		headers.WriteString("\n")
-		fOut, err := os.Create(*flgOut)
-		if err != nil {
-			log.Fatal("Cannot create file", err)
-		}
-		defer fOut.Close()
-		fmt.Fprintf(fOut, headers.String())
-		fmt.Fprintf(fOut, buffer.String())
-		fmt.Println("\n\nWell done!\n")
+		// fOut, err := os.Create(*flgOut)
+		// if err != nil {
+		// 	log.Fatal("Cannot create file", err)
+		// }
+		// defer fOut.Close()
+		// fmt.Fprintf(fOut, headers.String())
+		// fmt.Fprintf(fOut, buffer.String())
+		// fmt.Println("\n\nWell done!\n")
 
 	case "locus":
 
 		var locFreq = map[string][]string{}
+
 		var locusCount = make(map[string]int)
 
 		headers.WriteString("Locus\t")
@@ -2201,36 +2202,35 @@ func makeMatrix() {
 
 			for _, val := range snps {
 
-				locusCount[val.Locus] = locusCount[val.Locus] + 1
+				locusCount[fmt.Sprintf("%v_%v", val.Locus, i)] = locusCount[fmt.Sprintf("%v_%v", val.Locus, i)] + 1
 
 			}
 			for _, allloc := range allLocuses {
 
-				locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[allloc]))
+				locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[fmt.Sprintf("%v_%v", allloc, i)]))
 
 			}
 
 		}
 
+		// for i := range files {
 		for _, allloc := range allLocuses {
-			// if buffer.Len() == 0 {
+
 			buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Join(locFreq[allloc], "\t")))
 
-			// } else {
-			// buffer.WriteString(fmt.Sprintln(allloc, strings.Join(locFreq[allloc], "\t")))
-
-			// }
-
 		}
+		// }
+
 		headers.WriteString("\n")
-		fOut, err := os.Create(*flgOut)
-		if err != nil {
-			log.Fatal("Cannot create file", err)
-		}
-		defer fOut.Close()
-		fmt.Fprintf(fOut, headers.String())
-		fmt.Fprintf(fOut, buffer.String())
-		fmt.Println("\n\nWell done!\n")
+		// fmt.Println(locFreq)
+		// fOut, err := os.Create(*flgOut)
+		// if err != nil {
+		// 	log.Fatal("Cannot create file", err)
+		// }
+		// defer fOut.Close()
+		// fmt.Fprintf(fOut, headers.String())
+		// fmt.Fprintf(fOut, buffer.String())
+		// fmt.Println("\n\nWell done!\n")
 
 	case "freq":
 		headers.WriteString("Pos\tFreq\n")
@@ -2242,6 +2242,16 @@ func makeMatrix() {
 
 		}
 
+		// case "dnds":
+		// 	// dnds := DnDsRes
+		// 	for i, file := range files {
+		// 		fmt.Printf("Calculating Dn/DS: Working on %v from %v \r", i+1, len(files))
+		// 		calcDnDsVal(file, true)
+		// 	}
+
+	}
+
+	if buffer.Len() != 0 && headers.Len() != 0 {
 		fOut, err := os.Create(*flgOut)
 		if err != nil {
 			log.Fatal("Cannot create file", err)
@@ -2250,7 +2260,6 @@ func makeMatrix() {
 		fmt.Fprintf(fOut, headers.String())
 		fmt.Fprintf(fOut, buffer.String())
 		fmt.Println("\n\nWell done!\n")
-
 	}
 
 }
@@ -2271,40 +2280,3 @@ func removeStringDuplicates(elements []string) []string {
 	sort.Strings(result)
 	return result
 }
-
-// func addcol(fname string, column []string) error {
-// 	// read the file
-// 	f, err := os.Open(fname)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	r := csv.NewReader(f)
-// 	lines, err := r.ReadAll()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if err = f.Close(); err != nil {
-// 		return err
-// 	}
-
-// 	// add column
-// 	l := len(lines)
-// 	if len(column) < l {
-// 		l = len(column)
-// 	}
-// 	for i := 0; i < l; i++ {
-// 		lines[i] = append(lines[i], column[i])
-// 	}
-
-// 	// write the file
-// 	f, err = os.Create(fname)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	w := csv.NewWriter(f)
-// 	if err = w.WriteAll(lines); err != nil {
-// 		f.Close()
-// 		return err
-// 	}
-// 	return f.Close()
-// }
