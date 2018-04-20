@@ -45,6 +45,7 @@ import (
 	// "io/ioutil"
 	// "encoding/csv"
 	"path/filepath"
+	"sync"
 )
 
 const (
@@ -1035,7 +1036,7 @@ func makeSeq(typeof string) []seqInfo {
 		}
 	}
 	for i, file := range files {
-		fmt.Printf("Generating sequences: Made %v from %v \r", i+1, len(files))
+		fmt.Printf("Generating sequences: Working on  %v from %v \r", i+1, len(files))
 		pos := make(map[int]string)
 		var buffer strings.Builder
 
@@ -1426,6 +1427,7 @@ func calcDnDsVal(file string, print bool) []DnDsRes {
 	snps := parserVCF(file, false, gene.AllGenesVal)
 
 	for _, val := range snps {
+		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
 		altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, nuc: val.Alt})
 
 		// start, end := getGenePosByName(val.Locus)
@@ -1924,13 +1926,18 @@ func makeAltString(locus string, positions []allPositionsInGene) string {
 	// lEnd, _ = strconv.Atoi(end)
 
 	lStart, lEnd := getGenePosByName(locus)
+
 	seq = getNucFromGenome(lStart, lEnd)
 
 	for _, nuc := range seq {
 		seqSplit = append(seqSplit, string(nuc))
 	}
+	// fmt.Println("Rv0278c", len(seqSplit))
 	for _, val := range positions {
+
+		// if val.pos-1 > lStart && val.pos-1 < lEnd {
 		seqSplit[val.pos-1] = strings.ToUpper(val.nuc)
+		// }
 	}
 	// seqSplit[9] = "*"
 	// fmt.Println(strings.Join(seqSplit, ""))
@@ -1947,7 +1954,7 @@ func getGenePosByName(locus string) (int, int) {
 			break
 		}
 	}
-	return start, end
+	return start - 1, end
 }
 
 func getProductByName(locus string) string {
@@ -2097,7 +2104,7 @@ func makeMatrix() {
 		headers.WriteString("Pos\t")
 
 		for i, file := range files {
-			fmt.Printf("Generating matrix: Made %v from %v \r", i+1, len(files))
+			fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
 
 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
 
@@ -2138,7 +2145,54 @@ func makeMatrix() {
 		// fmt.Fprintf(fOut, headers.String())
 		// fmt.Fprintf(fOut, buffer.String())
 		// fmt.Println("\n\nWell done!\n")
+	case "table":
+		var posFreq = map[int][]string{}
+		pos := make(map[int]string)
 
+		// headers.WriteString("Pos\t")
+
+		for i, file := range files {
+			fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+
+			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+
+			snps := parserVCF(file, false, gene.AllGenesVal)
+
+			for _, val := range snps {
+
+				pos[val.APos] = val.Alt
+
+			}
+
+			for _, allpos := range AllPos {
+				if posCount[allpos] < len(files) {
+					if pos[allpos] != "" {
+						posFreq[allpos] = append(posFreq[allpos], strconv.Itoa(allpos))
+
+					} else {
+						posFreq[allpos] = append(posFreq[allpos], "0")
+
+					}
+				}
+
+			}
+		}
+		for _, allpos := range AllPos {
+			if posCount[allpos] < len(files) {
+
+				buffer.WriteString(fmt.Sprintln(strings.Join(posFreq[allpos], "\t")))
+
+			}
+		}
+		headers.WriteString("\n")
+		// fOut, err := os.Create(*flgOut)
+		// if err != nil {
+		// 	log.Fatal("Cannot create file", err)
+		// }
+		// defer fOut.Close()
+		// fmt.Fprintf(fOut, headers.String())
+		// fmt.Fprintf(fOut, buffer.String())
+		// fmt.Println("\n\nWell done!\n")
 	case "nuc":
 		var posFreq = map[int][]string{}
 		pos := make(map[int]string)
@@ -2146,7 +2200,7 @@ func makeMatrix() {
 		headers.WriteString("Pos\t")
 
 		for i, file := range files {
-			fmt.Printf("Generating matrix: Made %v from %v \r", i+1, len(files))
+			fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
 
 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
 
@@ -2176,14 +2230,6 @@ func makeMatrix() {
 
 		}
 		headers.WriteString("\n")
-		// fOut, err := os.Create(*flgOut)
-		// if err != nil {
-		// 	log.Fatal("Cannot create file", err)
-		// }
-		// defer fOut.Close()
-		// fmt.Fprintf(fOut, headers.String())
-		// fmt.Fprintf(fOut, buffer.String())
-		// fmt.Println("\n\nWell done!\n")
 
 	case "locus":
 
@@ -2194,7 +2240,7 @@ func makeMatrix() {
 		headers.WriteString("Locus\t")
 
 		for i, file := range files {
-			fmt.Printf("Generating matrix: Made %v from %v \r", i+1, len(files))
+			fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
 
 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
 
@@ -2213,24 +2259,13 @@ func makeMatrix() {
 
 		}
 
-		// for i := range files {
 		for _, allloc := range allLocuses {
 
 			buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Join(locFreq[allloc], "\t")))
 
 		}
-		// }
 
 		headers.WriteString("\n")
-		// fmt.Println(locFreq)
-		// fOut, err := os.Create(*flgOut)
-		// if err != nil {
-		// 	log.Fatal("Cannot create file", err)
-		// }
-		// defer fOut.Close()
-		// fmt.Fprintf(fOut, headers.String())
-		// fmt.Fprintf(fOut, buffer.String())
-		// fmt.Println("\n\nWell done!\n")
 
 	case "freq":
 		headers.WriteString("Pos\tFreq\n")
@@ -2242,13 +2277,24 @@ func makeMatrix() {
 
 		}
 
-		// case "dnds":
-		// 	// dnds := DnDsRes
-		// 	for i, file := range files {
-		// 		fmt.Printf("Calculating Dn/DS: Working on %v from %v \r", i+1, len(files))
-		// 		calcDnDsVal(file, true)
-		// 	}
+	case "dnds":
+		// var dnds [][]DnDsRes
+		prompt := bufio.NewReader(os.Stdin)
+		fmt.Print("It will take some time. Continue?: ")
+		yesNo, _ := prompt.ReadString('\n')
 
+		if yesNo == "y\n" || yesNo == "Y\n" {
+			var wg sync.WaitGroup
+			for _, file := range files {
+				wg.Add(1)
+				// fmt.Printf("Calculating Dn/DS: Working on %v from %v \r", i+1, len(files))
+				// fmt.Println(file)
+				calcDnDsVal(file, true)
+				defer wg.Done()
+			}
+			wg.Wait()
+			// fmt.Println(dnds)
+		}
 	}
 
 	if buffer.Len() != 0 && headers.Len() != 0 {
