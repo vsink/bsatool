@@ -45,7 +45,7 @@ import (
 	// "io/ioutil"
 	// "encoding/csv"
 	"path/filepath"
-	"sync"
+	// "sync"
 )
 
 const (
@@ -2279,22 +2279,44 @@ func makeMatrix() {
 
 	case "dnds":
 		// var dnds [][]DnDsRes
+		var locDNDS = map[string][]string{}
+
 		prompt := bufio.NewReader(os.Stdin)
 		fmt.Print("It will take some time. Continue?: ")
 		yesNo, _ := prompt.ReadString('\n')
 
 		if yesNo == "y\n" || yesNo == "Y\n" {
-			var wg sync.WaitGroup
-			for _, file := range files {
-				wg.Add(1)
-				// fmt.Printf("Calculating Dn/DS: Working on %v from %v \r", i+1, len(files))
+			headers.WriteString("Locus\t")
+			// var wg sync.WaitGroup
+			for i, file := range files {
+				headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+				// wg.Add(1)
+				fmt.Printf("Calculating Dn/DS: Working on %v from %v \r", i+1, len(files))
 				// fmt.Println(file)
-				calcDnDsVal(file, true)
-				defer wg.Done()
+				dnds := calcDnDsVal(file, false)
+				// fmt.Println(dnds)
+				for _, dndsVal := range dnds {
+					// fmt.Println(dndsVal.Locus, dndsVal.DNDS)
+					locDNDS[dndsVal.Locus] = append(locDNDS[dndsVal.Locus], fmt.Sprintf("%.2f", dndsVal.DNDS))
+				}
+				// defer wg.Done()
 			}
-			wg.Wait()
+			// wg.Wait()
 			// fmt.Println(dnds)
+
+			for _, allloc := range allLocuses {
+				if len(locDNDS[allloc]) != 0 {
+					buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Join(locDNDS[allloc], "\t")))
+					// } else {
+
+					// buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Repeat("1\t", len(files))))
+
+				}
+			}
+
+			headers.WriteString("\n")
 		}
+
 	}
 
 	if buffer.Len() != 0 && headers.Len() != 0 {
