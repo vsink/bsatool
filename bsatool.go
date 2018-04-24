@@ -58,7 +58,7 @@ const (
 |: |_)  :) /" \   :)/   /  \\  \\:  |  \        /  \        /  ( \_|:  \  
 (_______/ (_______/(___/    \___)\__|   \"_____/    \"_____/    \_______) 
                                                                           
- BSATool - Bacterial Snp Annotation Tool ver.0.5alpha
+ BSATool - Bacterial Snp Annotation Tool ver.0.18.04alpha
        Laboratory of Social and Epidemic Infections
  Scientific Centre for Family Health and Human Reproduction Problems
      (c) V.Sinkov & O.Ogarkov,Irkutsk, Russia, 2018                                   
@@ -151,6 +151,11 @@ type DnDsRes struct {
 	N, S, PN, PS, DN, DS, DNDS float64
 	ND, NS                     int
 	Locus, Product             string
+}
+
+type GC3Type struct {
+	GC3Alt, GC3Ref, GCalt, GCref float32
+	Locus                        string
 }
 
 // type allPositionsInGeneArray struct {
@@ -389,6 +394,7 @@ func getSNPInfo(apos int, g gene.Gene, alt string) (gene.SNPinfo, int) {
 		tangIdx = tang.GetTangInx(aaRefShort, aaAltShort)
 	} else if aaRefShort != aaAltShort && aaAltShort == "X" {
 		mut = "nonsense"
+		tangIdx = "-"
 	}
 
 	if strings.ToUpper(alt) == strings.ToUpper(nucG) {
@@ -1482,7 +1488,7 @@ func calcDnDsVal(file string, print bool) []DnDsRes {
 		start, end := getGenePosByName(val)
 		refS := getNucFromGenome(start, end)
 		dnds := codon.CalcDnDs(refS, altS)
-
+		// fmt.Println(val, "\n", refS)
 		prod := getProductByName(val)
 		// 	N, S, PN, PS, DN, DS, DNDS float64
 		// ND, NS                     int
@@ -1498,6 +1504,61 @@ func calcDnDsVal(file string, print bool) []DnDsRes {
 	}
 
 	return dndsArray
+
+}
+
+func calcGC3Val(file string) []GC3Type {
+	// var wg sync.WaitGroup
+	var altPositions = make(map[string][]allPositionsInGene)
+	// var validData []string
+	var gcArray []GC3Type
+	// wg.Add(1)
+
+	var allLocusUnsort, allLocuses []string
+
+	snps := parserVCF(file, false, gene.AllGenesVal)
+
+	for _, val := range snps {
+		// defer wg.Done()
+		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
+		altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, nuc: val.Alt})
+
+		allLocusUnsort = append(allLocusUnsort, val.Locus)
+	}
+	allLocuses = removeStringDuplicates(allLocusUnsort)
+
+	// for key := range altPositions {
+	// 	// defer wg.Done()
+	// 	// fmt.Println(key, len(val))
+	// 	// fmt.Println(key, val)
+	// 	// if len(val) > 1 {
+	// 	validData = append(validData, key)
+	// 	// }
+	// }
+	// sort.Strings(validData)
+
+	for _, val := range allLocuses {
+
+		// defer wg.Done()
+		altS := makeAltString(val, altPositions[val])
+
+		start, end := getGenePosByName(val)
+
+		refS := getNucFromGenome(start, end)
+		// if len(altS) == 0 {
+		// 	altS = refS
+		// 	fmt.Println("!!!!!")
+		// }
+
+		gc_alt, _, _, gc3_alt := codon.GcCodonCalc(altS)
+		gc_ref, _, _, gc3_ref := codon.GcCodonCalc(refS)
+
+		gcArray = append(gcArray, GC3Type{Locus: val, GC3Alt: gc3_alt, GC3Ref: gc3_ref, GCalt: gc_alt, GCref: gc_ref})
+
+	}
+	// wg.Wait()
+
+	return gcArray
 
 }
 
@@ -1905,7 +1966,7 @@ func testGeneInfo(genes []gene.Gene) {
 
 		start, _ = strconv.Atoi(g.Start)
 		end, _ = strconv.Atoi(g.End)
-		seq = getNucFromGenome(start, end)
+		seq = getNucFromGenome(start-1, end)
 		// fmt.Println(seq)
 		if start != 0 && end != 0 {
 			gc, gc1, gc2, gc3 = codon.GcCodonCalc(seq)
@@ -1936,9 +1997,10 @@ func makeAltString(locus string, positions []allPositionsInGene) string {
 	for _, val := range positions {
 
 		// if val.pos-1 > lStart && val.pos-1 < lEnd {
-		seqSplit[val.pos-1] = strings.ToUpper(val.nuc)
+		seqSplit[val.pos-1] = val.nuc
 		// }
 	}
+
 	// seqSplit[9] = "*"
 	// fmt.Println(strings.Join(seqSplit, ""))
 	return strings.Join(seqSplit, "")
@@ -1985,7 +2047,7 @@ func toCircos(genes []gene.Gene) {
 	for _, g := range genes {
 		start, _ = strconv.Atoi(g.Start)
 		end, _ = strconv.Atoi(g.End)
-		seq = getNucFromGenome(start, end)
+		seq = getNucFromGenome(start-1, end)
 		// fmt.Println(seq)
 		if start != 0 && end != 0 {
 			gc, _, _, _ = codon.GcCodonCalc(seq)
@@ -2079,7 +2141,7 @@ func makeMatrix() {
 	for i, file := range files {
 
 		// if *flgVerbose == true {
-		fmt.Printf("Working on %v files from %v \r", i+1, len(files))
+		fmt.Printf("Preparing files: Working on %v files from %v \r", i+1, len(files))
 		// }
 		snps := parserVCF(file, false, gene.AllGenesVal)
 		for _, val := range snps {
@@ -2137,14 +2199,48 @@ func makeMatrix() {
 			}
 		}
 		headers.WriteString("\n")
-		// fOut, err := os.Create(*flgOut)
-		// if err != nil {
-		// 	log.Fatal("Cannot create file", err)
-		// }
-		// defer fOut.Close()
-		// fmt.Fprintf(fOut, headers.String())
-		// fmt.Fprintf(fOut, buffer.String())
-		// fmt.Println("\n\nWell done!\n")
+
+	// case "tang":
+	// 	var posTang = map[int][]string{}
+	// 	pos := make(map[int]string)
+
+	// 	headers.WriteString("Pos\tTang\t")
+
+	// 	for i, file := range files {
+	// 		fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+
+	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+
+	// 		snps := parserVCF(file, false, gene.AllGenesVal)
+
+	// 		for _, val := range snps {
+
+	// 			pos[val.APos] = val.Tang
+
+	// 		}
+
+	// 		for _, allpos := range AllPos {
+	// 			// if posCount[allpos] < len(files) {
+	// 			if pos[allpos] != "" {
+	// 				posTang[allpos] = append(posTang[allpos], pos[allpos])
+
+	// 				// } else {
+	// 				// posFreq[allpos] = append(posFreq[allpos], "0")
+
+	// 				// }
+	// 			}
+
+	// 		}
+	// 	}
+	// 	for _, allpos := range AllPos {
+	// 		// if posCount[allpos] < len(files) {
+
+	// 		buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posTang[allpos], "\t")))
+
+	// 		// }
+	// 	}
+	// 	headers.WriteString("\n")
+
 	case "table":
 		var posFreq = map[int][]string{}
 		pos := make(map[int]string)
@@ -2197,7 +2293,7 @@ func makeMatrix() {
 		var posFreq = map[int][]string{}
 		pos := make(map[int]string)
 
-		headers.WriteString("Pos\t")
+		headers.WriteString("Pos\tRef\t")
 
 		for i, file := range files {
 			fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
@@ -2215,7 +2311,7 @@ func makeMatrix() {
 			for _, allpos := range AllPos {
 
 				if pos[allpos] != "" {
-					posFreq[allpos] = append(posFreq[allpos], pos[allpos])
+					posFreq[allpos] = append(posFreq[allpos], fmt.Sprintf("%v", pos[allpos]))
 
 				} else {
 					posFreq[allpos] = append(posFreq[allpos], strings.ToUpper(getNucFromGenomePos(allpos)))
@@ -2226,7 +2322,7 @@ func makeMatrix() {
 		}
 		for _, allpos := range AllPos {
 			// if buffer.Len() == 0 {
-			buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
+			buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.ToUpper(getNucFromGenomePos(allpos)), "\t", strings.Join(posFreq[allpos], "\t")))
 
 		}
 		headers.WriteString("\n")
@@ -2282,42 +2378,109 @@ func makeMatrix() {
 		var locDNDS = map[string][]string{}
 
 		prompt := bufio.NewReader(os.Stdin)
-		fmt.Print("It will take some time. Continue?: ")
+		fmt.Printf("It will take some time(~%v min). Continue?: ", len(files))
 		yesNo, _ := prompt.ReadString('\n')
 
 		if yesNo == "y\n" || yesNo == "Y\n" {
 			headers.WriteString("Locus\t")
-			// var wg sync.WaitGroup
+
 			for i, file := range files {
 				headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
-				// wg.Add(1)
+
 				fmt.Printf("Calculating Dn/DS: Working on %v from %v \r", i+1, len(files))
-				// fmt.Println(file)
-				dnds := calcDnDsVal(file, false)
-				// fmt.Println(dnds)
+
+				dnds := calcDnDsVal(file, true)
+
 				for _, dndsVal := range dnds {
-					// fmt.Println(dndsVal.Locus, dndsVal.DNDS)
+
 					locDNDS[dndsVal.Locus] = append(locDNDS[dndsVal.Locus], fmt.Sprintf("%.2f", dndsVal.DNDS))
+
 				}
-				// defer wg.Done()
+
 			}
-			// wg.Wait()
-			// fmt.Println(dnds)
 
 			for _, allloc := range allLocuses {
 				if len(locDNDS[allloc]) != 0 {
-					buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Join(locDNDS[allloc], "\t")))
-					// } else {
 
-					// buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Repeat("1\t", len(files))))
+					buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
 
 				}
 			}
 
 			headers.WriteString("\n")
+
 		}
 
+	case "gc3":
+		// calcGC3Val
+		var locGC3 = map[string][]string{}
+		var refGC3 = map[string]string{}
+
+		headers.WriteString("Locus\tRefCG3\t")
+
+		for i, file := range files {
+
+			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+
+			fmt.Printf("Calculating GC3 values: Working on %v from %v \r", i+1, len(files))
+
+			gc3 := calcGC3Val(file)
+
+			for _, gc3val := range gc3 {
+
+				locGC3[gc3val.Locus] = append(locGC3[gc3val.Locus], fmt.Sprintf("%.2f", gc3val.GC3Alt))
+				refGC3[gc3val.Locus] = fmt.Sprintf("%.2f", gc3val.GC3Ref)
+
+			}
+
+		}
+
+		for _, allloc := range allLocuses {
+			// if len(locGC3[allloc]) != 0 {
+
+			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t%v\t", allloc, refGC3[allloc]), strings.Join(locGC3[allloc], "\t")))
+
+			// }
+		}
+
+		headers.WriteString("\n")
+
 	}
+	// case "gc":
+	// 	// calcGC3Val
+	// 	var locGC = map[string][]string{}
+	// 	var refGC = map[string]string{}
+
+	// 	headers.WriteString("Locus\tRefCG\t")
+
+	// 	for i, file := range files {
+
+	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+
+	// 		fmt.Printf("Calculating GC values: Working on %v from %v \r", i+1, len(files))
+
+	// 		gc := calcGC3Val(file)
+
+	// 		for _, gcval := range gc {
+
+	// 			locGC[gcval.Locus] = append(locGC[gcval.Locus], fmt.Sprintf("%.2f", gcval.GCalt))
+	// 			refGC[gcval.Locus] = fmt.Sprintf("%.2f", gcval.GCref)
+
+	// 		}
+
+	// 	}
+
+	// 	for _, allloc := range allLocuses {
+
+	// 		if len(locGC[allloc]) != 0 {
+	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t%v\t", allloc, refGC[allloc]), strings.Join(locGC[allloc], "\t")))
+
+	// 		}
+	// 	}
+
+	// 	headers.WriteString("\n")
+
+	// }
 
 	if buffer.Len() != 0 && headers.Len() != 0 {
 		fOut, err := os.Create(*flgOut)
