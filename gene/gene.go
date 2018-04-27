@@ -19,6 +19,8 @@ package gene
 // }
 var AllGenesVal []Gene
 
+// var GenomeSeqSlice []string // информация об генах, загруженная из базы
+
 //Gene is structrue of imported from GB file fields
 type Gene struct {
 	Locus string `json:"locus"`

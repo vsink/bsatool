@@ -46,6 +46,7 @@ import (
 	// "encoding/csv"
 	"path/filepath"
 	// "sync"
+	// "arg"
 )
 
 const (
@@ -83,6 +84,12 @@ const (
 	lcnRegExp   = `^(\w+)\W+codon(\d+)\W+(.*)`
 	url         = "localhost:8080"
 )
+
+// var args struct {
+// 	MkDB, Debug, GenomeMap, Tang, Web, Share, InDel, Verbose, WithRef, Dev bool
+// 	GBFile, Out, DB, VCF, MakeSeq, SNP, TestMode, InFile, Type, Action     string
+// 	Pos, Port                                                              int
+// }
 
 // type SNP interface {
 //
@@ -2430,6 +2437,9 @@ func makeMatrix() {
 
 				locGC3[gc3val.Locus] = append(locGC3[gc3val.Locus], fmt.Sprintf("%.2f", gc3val.GC3Alt))
 				refGC3[gc3val.Locus] = fmt.Sprintf("%.2f", gc3val.GC3Ref)
+				// if *flgDebug == true {
+				// 	fmt.Printf("L:%v Alt:%v Ref:%v\n", gc3val.Locus, gc3val.GC3Alt, gc3val.GC3Ref)
+				// }
 
 			}
 
