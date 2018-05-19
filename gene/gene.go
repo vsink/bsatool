@@ -17,23 +17,14 @@ package gene
 // type SNP interface {
 // 	ReadGB()
 // }
-var AllGenesVal []Gene
+// var AllGenesVal []Gene
 
 // var GenomeSeqSlice []string // информация об генах, загруженная из базы
 
 //Gene is structrue of imported from GB file fields
 type Gene struct {
-	Locus string `json:"locus"`
-	// TypeOf    string `json:"typeof"`
-	Start     string `json:"start"`
-	End       string `json:"end"`
-	Name      string `json:"name"`
-	Product   string `json:"product"`
-	Direction string `json:"direction"`
-	GeneID    string `json:"gene_id"`
-	ProteinID string `json:"protein_id"`
-	Note      string `json:"note"`
-	GOA       string `json:"goa"`
+	Locus, Name, Product, Direction, GeneID, ProteinID, Note, GOA, TypeOf string
+	Start, End                                                            int
 }
 
 // SNPinfo is structure of annotatted SNP
@@ -44,10 +35,10 @@ type SNPinfo struct {
 		PosInCodonG позиция в буквы в кодоне (0-первая, 1-средняя, 2-последняя)
 
 	*/
-	APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen int
+	APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen, Start, End int
 	RefCodon, AltCodon, RefAA, AltAA, Locus,
-	Direction, NucInPos, Product, Name, Start,
-	RefAAShort, AltAAShort, End, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv string
+	Direction, NucInPos, Product, Name,
+	RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf string
 }
 
 type INDELinfo struct {
