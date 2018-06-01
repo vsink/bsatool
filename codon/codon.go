@@ -117,10 +117,10 @@ func codonCompare(codon1, codon2 string) (int, int) {
 	// fmt.Printf("diff:%v exact:%v\n", diffC, exactC)
 }
 
-func GcCodonCalc(seq string) (float32, float32, float32, float32) {
+func GcCodonCalc(seq string) (float64, float64, float64, float64) {
 	var codonsMap = make(map[int]string)
 	var i, gcCount1, gcCount2, gcCount3, gcCount int
-	var gc1, gc2, gc3, gc float32
+	var gc1, gc2, gc3, gc float64
 	// var codons []string
 	var buffer strings.Builder
 	for _, val := range seq {
@@ -160,10 +160,10 @@ func GcCodonCalc(seq string) (float32, float32, float32, float32) {
 			// fmt.Println(pos, string(nuc))
 		}
 	}
-	gc = (float32(gcCount) / float32(len(codonsMap)*3)) * 100
-	gc1 = (float32(gcCount1) / float32(len(codonsMap)*3)) * 100
-	gc2 = (float32(gcCount2) / float32(len(codonsMap)*3)) * 100
-	gc3 = (float32(gcCount3) / float32(len(codonsMap)*3)) * 100
+	gc = (float64(gcCount) / float64(len(codonsMap)*3)) * 100
+	gc1 = (float64(gcCount1) / float64(len(codonsMap)*3)) * 100
+	gc2 = (float64(gcCount2) / float64(len(codonsMap)*3)) * 100
+	gc3 = (float64(gcCount3) / float64(len(codonsMap)*3)) * 100
 	// fmt.Printf("gc:%.2f%% gc1:%.2f%% gc2:%.2f%% gc3:%.2f%%\n", gc, gc1, gc2, gc3)
 	// fmt.Println(codonsMap)
 	return gc, gc1, gc2, gc3

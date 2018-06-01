@@ -24,7 +24,7 @@ package gene
 //Gene is structrue of imported from GB file fields
 type Gene struct {
 	Locus, Name, Product, Direction, GeneID, ProteinID, Note, GOA, TypeOf string
-	Start, End                                                            int
+	Start, End, NucCore                                                   int
 }
 
 // SNPinfo is structure of annotatted SNP
@@ -35,7 +35,7 @@ type SNPinfo struct {
 		PosInCodonG позиция в буквы в кодоне (0-первая, 1-средняя, 2-последняя)
 
 	*/
-	APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen, Start, End int
+	APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen, Start, End, NucCore int
 	RefCodon, AltCodon, RefAA, AltAA, Locus,
 	Direction, NucInPos, Product, Name,
 	RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf string
@@ -49,7 +49,7 @@ type INDELinfo struct {
 }
 
 type SNPcheck struct {
-	Locus, PosInGene, CodonNbrInG, Ref, Alt, Name, TypeOf, APos, AASref, AASalt, AALref, AALalt, Raw string
+	Locus, PosInGene, CodonNbrInG, Ref, Alt, Name, TypeOf, APos, AASref, AASalt, AALref, AALalt, Raw, Tag string
 }
 
 type GeneInfo struct {
