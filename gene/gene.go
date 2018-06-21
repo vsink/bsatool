@@ -38,7 +38,7 @@ type SNPinfo struct {
 	APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen, Start, End, NucCore int
 	RefCodon, AltCodon, RefAA, AltAA, Locus,
 	Direction, NucInPos, Product, Name,
-	RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf string
+	RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf, ComplexIndex string
 }
 
 type INDELinfo struct {

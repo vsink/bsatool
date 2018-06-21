@@ -35,6 +35,7 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 	var N, S, expN, expS float64
 	threeFour := big.NewRat(3, 4)
 	threeFour2Float, _ := threeFour.Float64()
+
 	re := regexp.MustCompile("\\w{3}")
 
 	refCodons := re.FindAllStringSubmatch(refSeq, -1)
@@ -117,6 +118,7 @@ func codonCompare(codon1, codon2 string) (int, int) {
 	// fmt.Printf("diff:%v exact:%v\n", diffC, exactC)
 }
 
+// GcCodonCalc is ....
 func GcCodonCalc(seq string) (float64, float64, float64, float64) {
 	var codonsMap = make(map[int]string)
 	var i, gcCount1, gcCount2, gcCount3, gcCount int
