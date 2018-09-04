@@ -47,6 +47,7 @@ import (
 
 	// "github.com/fatih/color"
 
+	textdistance "github.com/masatana/go-textdistance"
 	"github.com/mitchellh/hashstructure"
 	"github.com/pkg/browser"
 	// "io/ioutil"
@@ -158,7 +159,7 @@ var (
 
 	gbWeb     = kingpin.Flag("web", " Open results in web browser").Short('w').Bool()
 	gbVerbose = kingpin.Flag("verbose", "Show additional information ").Short('v').Default("false").Bool()
-	gbIndex   = kingpin.Flag("index", "Calculate Tang Index for amino acid changes").Default("false").Bool()
+	gbIndex   = kingpin.Flag("index", "Calculate Complex Index for amino acid changes").Default("false").Bool()
 	gbPort    = kingpin.Flag("port", "Use your own localhost:port (default:8080)").Default("8080").String()
 	gbNoSeq   = kingpin.Flag("noseq", "Don't show nucleotides").Default("false").Bool()
 	gbDebug   = kingpin.Flag("debug", "Debug mode").Default("false").Bool()
@@ -186,7 +187,7 @@ var (
 	// statWeb     = annAction.Flag("web", "").Short('w').Bool()
 	statInFile  = statAction.Flag("in", "Input file").Short('i').String()
 	statOutFile = statAction.Flag("out", "Output file").Short('o').String()
-	statTypeOf  = statAction.Flag("type", "Type of matrix (binary, gc3, dnds, table, nc, locus. freq").Short('t').String()
+	statTypeOf  = statAction.Flag("type", "Type of matrix (binary, gc3, dnds, table, nc, locus. freq, jw").Short('t').String()
 	statInRule  = statAction.Flag("rule", "Input rule file").Short('r').String()
 	// statMkSeq   = statAction.Flag("mkseq", "").Bool()
 	// statTH      = statAction.Flag("th", "").Int()
@@ -235,6 +236,12 @@ type DnDsRes struct {
 	N, S, PN, PS, DN, DS, DNDS float64
 	ND, NS                     int
 	Locus, Product             string
+}
+
+// JaroWinklerInfo is....
+type JaroWinklerInfo struct {
+	Locus, Product string
+	JWDist         float64
 }
 
 // GC3Type is....
@@ -357,7 +364,7 @@ func main() {
 			snpStat()
 		case "dnds":
 			if _, err := os.Stat(*statInFile); os.IsNotExist(err) {
-				fmt.Printf("The %v file is not exist!\n", *statInFile)
+				fmt.Println("No input file found")
 				os.Exit(3)
 			}
 			calcDnDsVal(*statInFile, *gbVerbose)
@@ -374,6 +381,8 @@ func main() {
 				fmt.Println("Please, use key -o (--out) to save data.")
 			}
 		case "range":
+			// go run bsatool.go stat -a range --db test_core -i BWAIntersections.txt
+
 			// for _, val := range *statOptions {
 			// var opt []string
 			// opt =strings.Split(*statOptions, ",")
@@ -384,6 +393,8 @@ func main() {
 				printSequenceRange(res, *gbWeb, *gbPort)
 			}
 		case "check":
+			// go run bsatool.go stat -a check --db test_core -i drugs2.txt -r rule.txt -w
+
 			var useRule bool
 			if *statInRule != "" {
 				useRule = true
@@ -617,6 +628,7 @@ func getSNPInfo(apos int, g gene.Gene, alt string, flgTang bool) (gene.SNPinfo, 
 	var altCodon string // аналогично для альтернативного кодона
 	var mut string
 	var tangIdx string
+	var tangIdxVal int
 	/*
 		определяем границы кодона, в зависимости от положения нуклеотида
 		0- три буквы справа
@@ -677,7 +689,7 @@ func getSNPInfo(apos int, g gene.Gene, alt string, flgTang bool) (gene.SNPinfo, 
 		mut = "missense"
 
 		// tangIdx = strconv.FormatFloat(amino.GetTangInx(aaRefShort, aaAltShort), 'f', 2, 64)
-		tangIdx = amino.GetComplexIndex(aaRefShort, aaAltShort, *gbVerbose)
+		tangIdx, tangIdxVal = amino.GetComplexIndex(aaRefShort, aaAltShort, *gbVerbose)
 	} else if aaRefShort != aaAltShort && aaAltShort == "X" {
 		mut = "nonsense"
 		tangIdx = "----"
@@ -701,7 +713,7 @@ func getSNPInfo(apos int, g gene.Gene, alt string, flgTang bool) (gene.SNPinfo, 
 		Direction: g.Direction, Name: g.Locus, Product: g.Product,
 		Start: g.Start, End: g.End, CodonNbrInG: codonNbrInG, AltCodon: altCodon,
 		AltAA: aaAlt, RefAAShort: aaRefShort, AltAAShort: aaAltShort,
-		Mutation: mut, Tang: tangIdx, Alt: alt,
+		Mutation: mut, Tang: tangIdx, TangIdxVal: tangIdxVal, Alt: alt,
 		Note: g.Note, ReportType: locReportType, ProteinID: g.ProteinID,
 		GeneID: g.GeneID, GOA: g.GOA, GeneLen: geneLen, TiTv: titv, TypeOf: typeOf}
 
@@ -1437,7 +1449,8 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 	splitedGenome = strings.SplitAfter(strings.Join(resString, ""), "")
 
 	var lDir, lLoc, lName, lProd, lNote, gID, pID, lGOA, lType string
-
+	var lPDBArr []string
+	var lInterProArr []string
 	var nucCore int
 	var cdsStEnd = regexp.MustCompile(`^(\w+)\s+(\d+)\W+(\d+)|^(\w+)\s+complement\W(\d+)\W+(\d+)`)
 	var cdsLocus = regexp.MustCompile(`locus_tag=(.*)`)
@@ -1447,6 +1460,8 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 	var cdsgID = regexp.MustCompile(`db_xref=GeneID:(\d+)`)
 	var cdsprotID = regexp.MustCompile(`protein_id=(.*)`)
 	var cdsGOA = regexp.MustCompile(`db_xref=GOA:(.*)`)
+	var cdsPDB = regexp.MustCompile(`db_xref=PDB:(.*)`)
+	var cdsInterPro = regexp.MustCompile(`db_xref=InterPro:(.*)`)
 
 	var startOfBlock, endOfBlock, cdsStart, cdsEnd, lStart, lEnd int
 	// var cdsOpen, cdsClosed int
@@ -1526,16 +1541,28 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 					lGOA = strings.TrimSpace(strings.Replace(cdsGOAMatch[1], " ", "", -1))
 
 				}
+				for _, cdsPDBMatch := range cdsPDB.FindAllStringSubmatch(val, -1) {
+					lPDBArr = append(lPDBArr, strings.TrimSpace(strings.Replace(cdsPDBMatch[1], " ", "", -1)))
 
+				}
+				for _, cdsInterProMatch := range cdsInterPro.FindAllStringSubmatch(val, -1) {
+					lInterProArr = append(lInterProArr, strings.TrimSpace(strings.Replace(cdsInterProMatch[1], " ", "", -1)))
+
+				}
+
+				// fmt.Println(lPDB)
 				// if *flgDev == true {
 				// 	fmt.Println(val)
 				// }
 
-				if gID == "" {
+				if gID != "" && lGOA == "" {
 					nucCore = 1
 
-				} else {
-					nucCore = 0
+				} else if gID == "" && lGOA != "" {
+					nucCore = 1
+
+				} else if gID == "" && lGOA == "" {
+					nucCore = 2
 				}
 				// fmt.Println(nucCore)
 
@@ -1559,16 +1586,18 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 				}
 
 				g := gene.Gene{Start: lStart, End: lEnd, Locus: lLoc, Direction: lDir,
-					Product: lProd, Name: lName, GeneID: gID, ProteinID: pID, Note: lNote, GOA: lGOA, TypeOf: lType}
+					Product: lProd, Name: lName, GeneID: gID, ProteinID: pID, Note: lNote, GOA: lGOA, TypeOf: lType, PDB: lPDBArr, InterPro: lInterProArr}
 
 				allGenesVal = append(allGenesVal, g)
 
 				if *gbVerbose == true {
 
-					fmt.Printf("l:%v s:%v e:%v d:%v p:%v gId:%v pId:%v n:%v GOA:%v T:%v\n", lLoc, lStart, lEnd, lDir, lProd, gID, pID, lNote, lGOA, lType)
+					fmt.Printf("l:%v s:%v e:%v d:%v p:%v gId:%v pId:%v n:%v GOA:%v T:%v InterPro:%v PDB:%v\n", lLoc, lStart, lEnd, lDir, lProd, gID, pID, lNote, lGOA, lType, lInterProArr, lPDBArr)
 
 				}
 				lName, lStart, lEnd, lLoc, lDir, lProd, gID, pID, lGOA, lNote, lType = "", 0, 0, "", "", "", "", "", "", "", ""
+				lPDBArr = nil
+				lInterProArr = nil
 
 			}
 		}
@@ -1579,9 +1608,11 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 		fmt.Printf("\nFound: %v %v", val, key)
 	}
 	if nucCore == 0 {
-		fmt.Println("\nGene Info: Genbank Id Nomenclature")
-	} else {
-		fmt.Println("\nGene Info: high-quality Gene Ontology (GO) annotations")
+		fmt.Println("\nGene Info: Genbank Id Nomenclature", nucCore)
+	} else if nucCore == 1 {
+		fmt.Println("\nGene Info: high-quality Gene Ontology (GO) annotations", nucCore)
+	} else if nucCore == 2 {
+		fmt.Println("\nGene Info: unknown", nucCore)
 	}
 
 	// sort.Slice(genomeCoordinates, func(i, j int) bool {
@@ -1755,6 +1786,9 @@ func parserVCF(f string, print bool, genes []gene.Gene) []gene.SNPinfo {
 
 					if apos >= lStart && apos <= lEnd {
 						snp, err := getSNPInfo(apos, g, alt, *gbIndex)
+						snp.InterPro = g.InterPro
+						snp.PDB = g.PDB
+						// fmt.Println(g.PDB)
 						// br := testing.Benchmark(snp)
 						// fmt.Println(br)
 
@@ -1778,7 +1812,9 @@ func parserVCF(f string, print bool, genes []gene.Gene) []gene.SNPinfo {
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+
 	return snpFromVCF
+
 }
 
 func about() {
@@ -1910,20 +1946,20 @@ func getInterGen(pos int) {
 
 func printTextResults(snps gene.SNPinfo, verbose bool) {
 
-	const fullAnnotations = "{{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
+	const fullAnnotations = " {{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
+		"{{.Locus}}\t{{.APos}}\tc.{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\tp.{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\tc.{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\tp.{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
 		"{{else if (and (ne .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
-		"{{.Locus}}\t{{.APos}}\tn.{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\tg.{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{else if (and (ne .TypeOf \"CDS\") (eq .ReportType \"T1\"))}}" +
-		"{{.Locus}}\t{{.APos}}\tn.{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t-\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\tg.{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{end}}"
 
 	const cdsAnnotations = "{{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\tc.{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\tp.{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\tc.{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\tp.{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
 		"{{end}}"
 
 	t := template.New("report")
@@ -1949,12 +1985,14 @@ func printWebResults(snps []gene.SNPinfo, port string) {
 			
 			{{if eq .NucCore 1}}
 			
-			<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
-			<td>AA</td><td>Type</td><td>Product</td><td>GOA</td><td>ProteinID</td>
-			{{else}}
-			<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
-			<td>AA</td><td>Type</td><td>Product</td><td>GeneID</td><td>ProteinID</td>
-			
+				<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
+				<td>AA</td><td>Type</td><td>Product</td><td><p title="Gene Ontology Annotation (GOA) Database">GOA</p></td><td><p title="The Universal Protein Resource (UniProt) is a comprehensive resource for protein sequence and annotation data">UniProt</p></td><td><p title="InterPro provides functional analysis of proteins by classifying them into families and predicting domains and important sites">InterPro</p></td><td><p title="Protein Data Bank (PDB)">PDB</p></td>
+			{{else if eq .NucCore 0}}
+				<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
+				<td>AA</td><td>Type</td><td>Product</td><td>GeneID</td><td>UniProt</td>
+			{{else if  eq .NucCore 2}}
+				<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
+				<td>AA</td><td>Type</td><td>Product</td><td>-</td><td>UniProt</td>
 			{{end}}
 			
 			</tr>
@@ -1965,32 +2003,45 @@ func printWebResults(snps []gene.SNPinfo, port string) {
 			{{/* 1 */}}
 				{{range $element := .}}
 				{{/* 2 */}}
+			
 			{{if .GeneID}}
 				<tr>
+					
 				<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
 				<td>{{.RefCodon}}/{{.AltCodon}}</td><td><p title="{{.RefAA}}{{.CodonNbrInG}}{{.AltAA}}">{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</p></td>
-				<td><p title="Complex Index: {{.Tang}}">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}"target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ncbi.nlm.nih.gov/gene/{{.GeneID}}={{.GeneID}}" target="_blank">{{.GeneID}}</a>
+				<td><p title="Complex Index: {{.Tang}}({{.TangIdxVal}})">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}"target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ncbi.nlm.nih.gov/gene/{{.GeneID}}={{.GeneID}}" target="_blank">{{.GeneID}}</a>
 				</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score">{{.ProteinID}}</td>
 				</tr>
 					{{/* 2 */}}
 			{{else}}
 				<tr>
+				
 					{{/* 3 */}}
 			{{if eq .TypeOf "CDS"}}			
 				<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
 				<td>{{.RefCodon}}/{{.AltCodon}}</td><td><p title="{{.RefAA}}{{.CodonNbrInG}}{{.AltAA}}">{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</p></td>			
 					{{/* 4 */}}
 			{{if eq .Mutation "missense"}}
-				<td bgcolor="#CECEF6"><p title="Complex Index: {{.Tang}}">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}" target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}" target="_blank">{{.GOA}}</a>
+				<td bgcolor="#CECEF6"><p title="Complex Index: {{.Tang}}({{.TangIdxVal}})">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}" target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}" target="_blank">{{.GOA}}</a>
 					{{/* 4 */}}
 			{{else if eq .Mutation "nonsense"}}
-				<td bgcolor="#F78181"><p title="Complex Index: {{.Tang}}">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}" target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}" target="_blank">{{.GOA}}</a>
+				<td bgcolor="#F78181"><p title="Complex Index: {{.Tang}}({{.TangIdxVal}})">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}" target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}" target="_blank">{{.GOA}}</a>
 					{{/* 4 */}}
 			{{else}}
-				<td bgcolor="#ddffcc"><p title="Complex Index: {{.Tang}}">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}" target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}" target="_blank">{{.GOA}}</a>
+				<td bgcolor="#ddffcc"><p title="Complex Index: {{.Tang}}({{.TangIdxVal}})">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}" target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ebi.ac.uk/QuickGO/GProtein?ac={{.GOA}}" target="_blank">{{.GOA}}</a>
 					{{/* 4 */}}
 			{{end}}
 				</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score" target="_blank">{{.ProteinID}}</td>
+				<td>
+				{{ range $value := .InterPro }}
+   				<a href="http://www.ebi.ac.uk/interpro/entry/{{$value}}" target="_blank">{{$value}}</a>
+				{{ end }}
+				</td>
+				<td>
+				{{ range $value := .PDB }}
+   				<a href="https://www.rcsb.org/structure/{{$value}}" target="_blank">{{$value}}</a>
+				{{ end }}			
+				</td>
 				</tr>
 				{{/* 3 */}}
 			{{end}}
@@ -2464,6 +2515,77 @@ func calcDnDsVal(file string, print bool) []DnDsRes {
 
 }
 
+func calcJaroWinklerDist(file string, print bool) []JaroWinklerInfo {
+
+	var altPositions = make(map[string][]allPositionsInGene)
+	var validData []string
+	var altSequences []string
+	var jwRes []JaroWinklerInfo
+	// var dndsArray []DnDsRes
+
+	var jarwinkl float64
+	snps := parserVCF(file, false, allGenesVal)
+
+	for _, val := range snps {
+		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
+		if val.TypeOf == "CDS" {
+			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, nuc: val.Alt})
+		}
+
+	}
+
+	// выбор генов, в которых обнаружены мутации
+	for key, val := range altPositions {
+		// fmt.Println(key, len(val))
+		if len(val) > 1 {
+			validData = append(validData, key)
+		}
+	}
+	sort.Strings(validData)
+
+	for _, val := range validData {
+
+		altS := makeAltString(val, altPositions[val])
+		start, end := getGenePosByName(val)
+		altSequences = append(altSequences, altS)
+		refS := getNucFromGenome(start-1, end)
+		jarwinkl, _ = textdistance.JaroDistance(refS, altS)
+		jwRes = append(jwRes, JaroWinklerInfo{Locus: val, JWDist: jarwinkl})
+		// fmt.Println(val, "\n", refS)
+		// prod := getProductByName(val)
+		// 	N, S, PN, PS, DN, DS, DNDS float64
+		// ND, NS                     int
+
+		// if dnds.ND != 0 && dnds.NS != 0 {
+		// 	i++
+		if print == true {
+			fmt.Printf("L:%v JW:%v\n", val, jarwinkl)
+		}
+		// 		// 	fmt.Printf("\nl:%v\tdn/ds:%.2f (%v:%v)\nREF:%v\nALT:%v\n", val, dnds.DNDS, start, end, refS, altS)
+		// 		// 	// fmt.Printf("Calculated %v dn/ds from %v\r", i, len(validData))
+		// 		// } else if print == true && *gbNoSeq == true {
+		// 		fmt.Printf("\nl:%v\tdn/ds:%.2f (%v:%v)\t%v", val, dnds.DNDS, start, end, prod)
+		// 	}
+
+		// 	dndsArray = append(dndsArray, DnDsRes{Locus: val, Product: prod, N: dnds.N, S: dnds.S, ND: dnds.ND, NS: dnds.NS, PN: dnds.PN, PS: dnds.PS, DN: dnds.DN, DS: dnds.DS, DNDS: dnds.DNDS})
+		// }
+
+	}
+	// for i := 1; i < len(altSequences); i++ {
+	// 	// for j := 1; j < len(altSequences); j++ {
+	// 	// fmt.Println(altSequences[i], altSequences[j])
+	// 	jarwinkl, _ = textdistance.JaroDistance(altSequences[i], altSequences[i-1])
+	// 	if print == true {
+	// 		fmt.Println(jarwinkl)
+	// 		jwArray = append(jwArray, jarwinkl)
+	// 	}
+	// 	// }
+	// }
+	// fmt.Println(jwRes)
+	return jwRes
+
+}
+
 func calcGC3Val(file string) []GC3Type {
 	// var wg sync.WaitGroup
 	var altPositions = make(map[string][]allPositionsInGene)
@@ -2683,6 +2805,7 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 	files := getListofVCF()
 	locSNPcheck := getSNPNotation(f)
 	var chkSNP []checkSNP
+
 	// var buffer strings.Builder
 	// bar := pb.ProgressBarTemplate(pbtmpl).Start(len(files))
 	// bar.SetWidth(90)
@@ -2692,23 +2815,26 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 		}
 		snps := parserVCF(file, false, allGenesVal)
 		mapOfVCF[file] = snps
+
 		// bar.Increment()
 		// i++
 		// fmt.Printf("processed %v files\r", i)
 	}
 	// bar.Finish()
 	// fmt.Println()
+
 	for file, snp := range mapOfVCF {
 		if verbose == true {
 			fmt.Printf("Working on %v                     \r", file)
 		}
 		// buffer.WriteString(fmt.Sprintf("%v ", file))
+
 		for _, val := range locSNPcheck {
 
 			lGpoS, _ := strconv.Atoi(val.PosInGene)
 			CodonNbrInG, _ := strconv.Atoi(val.CodonNbrInG)
 			lAPos, _ := strconv.Atoi(val.APos)
-
+			// fmt.Println(val.TypeOf)
 			for _, snpFromFile := range snp {
 
 				switch val.TypeOf {
@@ -2760,8 +2886,13 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 					}
 				}
 			}
+
 			// fmt.Println(mapofSNP)
 
+			// if len(mapofSNP) == 0 {
+			// 	fmt.Println("Не было обнаружено ни одного совпадения в файле ", file, " между позициями в исследуемых файлах и списком СНИПов. Это может быть следствием того, что либо в ваших данных отсутствуют данные позиции, либо результатом использования различных референсных геномов при картировании и при анализе.  Обратите внимание на то, что имена локусов также могут быть различными и приведите ваш список сравнения соответственно используемому референсному геному. ")
+			// 	// }
+			// }
 		}
 
 	}
@@ -3314,6 +3445,36 @@ func makeMatrix(typeof string, fileOut string) {
 			headers.WriteString("\n")
 
 		}
+	case "jw":
+		// var dnds [][]DnDsRes
+		var locJW = map[string][]string{}
+
+		headers.WriteString("Locus\t")
+
+		for i, file := range files {
+			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+
+			fmt.Printf("Calculating Jaro Winkler distance: Working on %v from %v (%v) \r", i+1, len(files), file)
+
+			jw := calcJaroWinklerDist(file, *gbVerbose)
+
+			for _, jwVal := range jw {
+
+				locJW[jwVal.Locus] = append(locJW[jwVal.Locus], fmt.Sprintf("%.3f", jwVal.JWDist))
+
+			}
+
+		}
+
+		for _, allloc := range allLocuses {
+			if len(locJW[allloc]) != 0 {
+
+				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t", allloc), strings.Join(locJW[allloc], "\t")))
+
+			}
+		}
+
+		headers.WriteString("\n")
 
 	case "gc3":
 		// calcGC3Val
@@ -3353,6 +3514,7 @@ func makeMatrix(typeof string, fileOut string) {
 		headers.WriteString("\n")
 
 	}
+
 	// case "gc":
 	// 	// calcGC3Val
 	// 	var locGC = map[string][]string{}

@@ -3729,10 +3729,10 @@ func GetDeltaHInx(refAA string, altAA string) float64 {
 }
 
 //GetComplexIndex is....
-func GetComplexIndex(refAA string, altAA string, verbose bool) string {
+func GetComplexIndex(refAA string, altAA string, verbose bool) (string, int) {
 	var buffer bytes.Buffer
-
-	idx := []byte{45, 45, 45, 45}
+	var Cindex int
+	idx := []byte{48, 48, 48, 48} //45
 	tang := GetTangInx(refAA, altAA)
 	gh := GetGHInx(refAA, altAA)
 	// sneath := GetSneathInx(refAA, altAA)
@@ -3741,22 +3741,26 @@ func GetComplexIndex(refAA string, altAA string, verbose bool) string {
 	bloss := GetBLOSSInx(refAA, altAA)
 
 	if tang <= 0.4 {
-		idx[0] = 043
+		idx[0] = 49
+		Cindex++
 	}
 	if gh > 100 {
-		idx[1] = 043
+		idx[1] = 49
+		Cindex++
 	}
 	if pam < 0 {
-		idx[2] = 043
+		idx[2] = 49
+		Cindex++
 	}
 	if bloss < 0 {
-		idx[3] = 043
+		idx[3] = 49
+		Cindex++
 	}
 	if verbose == true {
 		buffer.WriteString(fmt.Sprintf("[t:%v,g:%v,p:%v,b:%v]", tang, gh, pam, bloss))
-		return fmt.Sprintf("%v%v", bytes.NewBuffer(idx).String(), buffer.String())
+		return fmt.Sprintf("%v%v", bytes.NewBuffer(idx).String(), buffer.String()), Cindex
 	} else {
-		return bytes.NewBuffer(idx).String()
+		return bytes.NewBuffer(idx).String(), Cindex
 	}
 
 }
