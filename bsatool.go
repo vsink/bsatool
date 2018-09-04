@@ -1449,8 +1449,7 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 	splitedGenome = strings.SplitAfter(strings.Join(resString, ""), "")
 
 	var lDir, lLoc, lName, lProd, lNote, gID, pID, lGOA, lType string
-	var lPDBArr []string
-	var lInterProArr []string
+	var lPDBArr, lInterProArr, lProSiteArr []string
 	var nucCore int
 	var cdsStEnd = regexp.MustCompile(`^(\w+)\s+(\d+)\W+(\d+)|^(\w+)\s+complement\W(\d+)\W+(\d+)`)
 	var cdsLocus = regexp.MustCompile(`locus_tag=(.*)`)
@@ -1462,6 +1461,7 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 	var cdsGOA = regexp.MustCompile(`db_xref=GOA:(.*)`)
 	var cdsPDB = regexp.MustCompile(`db_xref=PDB:(.*)`)
 	var cdsInterPro = regexp.MustCompile(`db_xref=InterPro:(.*)`)
+	var cdsProSite = regexp.MustCompile(`inference=protein motif:PROSITE:(.*)`)
 
 	var startOfBlock, endOfBlock, cdsStart, cdsEnd, lStart, lEnd int
 	// var cdsOpen, cdsClosed int
@@ -1549,8 +1549,12 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 					lInterProArr = append(lInterProArr, strings.TrimSpace(strings.Replace(cdsInterProMatch[1], " ", "", -1)))
 
 				}
+				for _, cdsProSiteMatch := range cdsProSite.FindAllStringSubmatch(val, -1) {
+					lProSiteArr = append(lProSiteArr, strings.TrimSpace(strings.Replace(cdsProSiteMatch[1], " ", "", -1)))
 
-				// fmt.Println(lPDB)
+				}
+
+				// fmt.Println(lProSiteArr)
 				// if *flgDev == true {
 				// 	fmt.Println(val)
 				// }
@@ -1586,18 +1590,19 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 				}
 
 				g := gene.Gene{Start: lStart, End: lEnd, Locus: lLoc, Direction: lDir,
-					Product: lProd, Name: lName, GeneID: gID, ProteinID: pID, Note: lNote, GOA: lGOA, TypeOf: lType, PDB: lPDBArr, InterPro: lInterProArr}
+					Product: lProd, Name: lName, GeneID: gID, ProteinID: pID, Note: lNote, GOA: lGOA, TypeOf: lType, PDB: lPDBArr, InterPro: lInterProArr, ProSite: lProSiteArr}
 
 				allGenesVal = append(allGenesVal, g)
 
 				if *gbVerbose == true {
 
-					fmt.Printf("l:%v s:%v e:%v d:%v p:%v gId:%v pId:%v n:%v GOA:%v T:%v InterPro:%v PDB:%v\n", lLoc, lStart, lEnd, lDir, lProd, gID, pID, lNote, lGOA, lType, lInterProArr, lPDBArr)
+					fmt.Printf("l:%v s:%v e:%v d:%v p:%v gId:%v pId:%v n:%v GOA:%v T:%v InterPro:%v PDB:%v ProSite:%v\n", lLoc, lStart, lEnd, lDir, lProd, gID, pID, lNote, lGOA, lType, lInterProArr, lPDBArr, lProSiteArr)
 
 				}
 				lName, lStart, lEnd, lLoc, lDir, lProd, gID, pID, lGOA, lNote, lType = "", 0, 0, "", "", "", "", "", "", "", ""
 				lPDBArr = nil
 				lInterProArr = nil
+				lProSiteArr = nil
 
 			}
 		}
@@ -1788,6 +1793,7 @@ func parserVCF(f string, print bool, genes []gene.Gene) []gene.SNPinfo {
 						snp, err := getSNPInfo(apos, g, alt, *gbIndex)
 						snp.InterPro = g.InterPro
 						snp.PDB = g.PDB
+						snp.ProSite = g.ProSite
 						// fmt.Println(g.PDB)
 						// br := testing.Benchmark(snp)
 						// fmt.Println(br)
@@ -1986,7 +1992,7 @@ func printWebResults(snps []gene.SNPinfo, port string) {
 			{{if eq .NucCore 1}}
 			
 				<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
-				<td>AA</td><td>Type</td><td>Product</td><td><p title="Gene Ontology Annotation (GOA) Database">GOA</p></td><td><p title="The Universal Protein Resource (UniProt) is a comprehensive resource for protein sequence and annotation data">UniProt</p></td><td><p title="InterPro provides functional analysis of proteins by classifying them into families and predicting domains and important sites">InterPro</p></td><td><p title="Protein Data Bank (PDB)">PDB</p></td>
+				<td>AA</td><td>Type</td><td>Product</td><td><p title="Gene Ontology Annotation (GOA) Database">GOA</p></td><td><p title="The Universal Protein Resource (UniProt) is a comprehensive resource for protein sequence and annotation data">UniProt</p></td><td><p title="InterPro provides functional analysis of proteins by classifying them into families and predicting domains and important sites">InterPro</p></td><td><p title="Protein Data Bank (PDB)">PDB</p></td><td>ProSite</td>
 			{{else if eq .NucCore 0}}
 				<td>Locus</td><td>Gene</td><td>Pos.</td><td>Mutation</td><td>Codons</td>
 				<td>AA</td><td>Type</td><td>Product</td><td>GeneID</td><td>UniProt</td>
@@ -2040,6 +2046,11 @@ func printWebResults(snps []gene.SNPinfo, port string) {
 				<td>
 				{{ range $value := .PDB }}
    				<a href="https://www.rcsb.org/structure/{{$value}}" target="_blank">{{$value}}</a>
+				{{ end }}			
+				</td>
+				<td>
+				{{ range $value := .ProSite }}
+   				<a href="https://prosite.expasy.org/{{$value}}" target="_blank">{{$value}}</a>
 				{{ end }}			
 				</td>
 				</tr>

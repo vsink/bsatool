@@ -25,8 +25,7 @@ package gene
 type Gene struct {
 	Locus, Name, Product, Direction, GeneID, ProteinID, Note, GOA, TypeOf string
 	Start, End, NucCore                                                   int
-	PDB                                                                   []string
-	InterPro                                                              []string
+	PDB, InterPro, ProSite                                                []string
 }
 
 // SNPinfo is structure of annotatted SNP
@@ -41,8 +40,7 @@ type SNPinfo struct {
 	RefCodon, AltCodon, RefAA, AltAA, Locus,
 	Direction, NucInPos, Product, Name,
 	RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf, ComplexIndex string
-	InterPro []string
-	PDB      []string
+	InterPro, PDB, ProSite []string
 }
 
 type INDELinfo struct {
