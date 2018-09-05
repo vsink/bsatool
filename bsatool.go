@@ -710,7 +710,7 @@ func getSNPInfo(apos int, g gene.Gene, alt string, flgTang bool) (gene.SNPinfo, 
 
 	snp = gene.SNPinfo{APos: apos, PosInGene: posInGene, PosInCodonG: posInCodonG,
 		RefCodon: codon, RefAA: aaRef, NucInPos: strings.ToUpper(nucG), Locus: g.Locus,
-		Direction: g.Direction, Name: g.Locus, Product: g.Product,
+		Direction: g.Direction, Name: g.Name, Product: g.Product,
 		Start: g.Start, End: g.End, CodonNbrInG: codonNbrInG, AltCodon: altCodon,
 		AltAA: aaAlt, RefAAShort: aaRefShort, AltAAShort: aaAltShort,
 		Mutation: mut, Tang: tangIdx, TangIdxVal: tangIdxVal, Alt: alt,
@@ -1553,7 +1553,7 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 					lProSiteArr = append(lProSiteArr, strings.TrimSpace(strings.Replace(cdsProSiteMatch[1], " ", "", -1)))
 
 				}
-
+				// fmt.Println(lName)
 				// fmt.Println(lProSiteArr)
 				// if *flgDev == true {
 				// 	fmt.Println(val)
@@ -1570,18 +1570,22 @@ func readGBFile(file string, verbose bool) (g []gene.Gene, genomeSplice []string
 				}
 				// fmt.Println(nucCore)
 
-				if lName == "" {
-					lName = lLoc
-				}
+				// if lName == "" {
+				// 	lName = lLoc
+				// }
 
 			} else if cdsStart == 0 && cdsEnd == 1 {
 
-				if lLoc == "" && lName != "" {
-					lLoc = lName
-				} else if lLoc == "" && lName == "" {
-					lLoc = fmt.Sprintf("%v_%v_%v", lType, lStart, lEnd)
+				// if lLoc == "" && lName != "" {
+				// 	lLoc = lName
+				// } else if lLoc == "" && lName == "" {
+				// 	lLoc = fmt.Sprintf("%v_%v_%v", lType, lStart, lEnd)
 
-				}
+				// }
+				// if lLoc == "" && lName == "" {
+				// 	lLoc = fmt.Sprintf("%v_%v_%v", lType, lStart, lEnd)
+
+				// }
 
 				if lProd == "" && lNote != "" {
 					lProd = lNote
