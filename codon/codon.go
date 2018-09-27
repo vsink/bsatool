@@ -3,6 +3,7 @@ package codon
 import (
 	"fmt"
 	"math"
+
 	// "math"
 	"math/big"
 	"regexp"
@@ -21,6 +22,16 @@ import (
 type DnDs struct {
 	N, S, PN, PS, DN, DS, DNDS float64
 	ND, NS                     int
+}
+
+type DnDsQuery struct {
+	OutChan        chan DnDs
+	RefSeq, AltSeq string
+}
+
+func (q *DnDsQuery) Request() {
+	q.OutChan <- CalcDnDs(q.RefSeq, q.AltSeq)
+
 }
 
 // CalcDnDs is....

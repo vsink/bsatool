@@ -29,7 +29,7 @@ type Gene struct {
 }
 
 // SNPinfo is structure of annotatted SNP
-type SNPinfo struct {
+type SnpInfo struct {
 	/*
 				APos абсолютная позиция в геноме
 					PosInGene позиция в гене
