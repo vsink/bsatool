@@ -40,10 +40,12 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 	var refSeqCodons = make(map[int]string)
 	var altSeqCodons = make(map[int]string)
 	// var mutType string
-	var nd []int
-	var sd []int
+
+	// var expNS []float64
+	var expN, expS float64
+
 	// var expN, expS float64
-	var N, S, expN, expS float64
+	// var Nd, Ns int
 	threeFour := big.NewRat(3, 4)
 	threeFour2Float, _ := threeFour.Float64()
 
@@ -51,17 +53,50 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 
 	refCodons := re.FindAllStringSubmatch(refSeq, -1)
 	altCodons := re.FindAllStringSubmatch(altSeq, -1)
+
 	for i, rCodon := range refCodons {
 		refSeqCodons[i] = strings.ToUpper(rCodon[0])
-		N, S = expectedSites(strings.ToUpper(rCodon[0]))
-
-		expN = expN + N
-		expS = expS + S
+		expNSReq := make(chan []float64)
+		go func() {
+			// fmt.Println("Gorutine 1 started")
+			expNSReq <- expectedSites(strings.ToUpper(rCodon[0]))
+		}()
+		// expNS = expectedSites(strings.ToUpper(rCodon[0]))
+		expNS := <-expNSReq
+		expN = expN + expNS[0] //N
+		expS = expS + expNS[1] //S
 
 	}
+
 	for i, aCodon := range altCodons {
 		altSeqCodons[i] = strings.ToUpper(aCodon[0])
 	}
+
+	ndnsResChan := make(chan []int)
+
+	go func() {
+		// fmt.Println("Gorutine 2 started")
+		ndnsResChan <- getNdNs(refSeqCodons, altSeqCodons)
+	}()
+
+	ndnsRes := <-ndnsResChan
+
+	Nd, Ns := ndnsRes[0], ndnsRes[1]
+
+	pN := float64(Nd) / expN
+	pS := float64(Ns) / expS
+	dn := -threeFour2Float * math.Log(float64(1-(4*float64(pN)/3)))
+	ds := -threeFour2Float * math.Log(float64(1-(4*float64(pS)/3)))
+	dNdS := dn / ds
+
+	newDNDS := DnDs{N: expN, S: expS, ND: Nd, NS: Ns, PN: pN, PS: pS, DN: dn, DS: ds, DNDS: dNdS}
+	// fmt.Println(dNdS, newDNDS)
+	return newDNDS
+}
+
+func getNdNs(refSeqCodons map[int]string, altSeqCodons map[int]string) (ndnsRes []int) {
+	var nd, sd []int
+
 	for key, val := range refSeqCodons {
 		for key1, val1 := range altSeqCodons {
 			if key == key1 && val == val1 {
@@ -94,14 +129,10 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 	for _, value := range sd {
 		Ns += value
 	}
-	pN := float64(Nd) / expN
-	pS := float64(Ns) / expS
-	dn := -threeFour2Float * math.Log(float64(1-(4*float64(pN)/3)))
-	ds := -threeFour2Float * math.Log(float64(1-(4*float64(pS)/3)))
-	dNdS := dn / ds
+	ndnsRes = append(ndnsRes, Nd) //Nd
+	ndnsRes = append(ndnsRes, Ns) //Ns
+	return ndnsRes
 
-	newDNDS := DnDs{N: expN, S: expS, ND: Nd, NS: Ns, PN: pN, PS: pS, DN: dn, DS: ds, DNDS: dNdS}
-	return newDNDS
 }
 
 func codonCompare(codon1, codon2 string) (int, int) {
@@ -183,7 +214,7 @@ func GcCodonCalc(seq string) (float64, float64, float64, float64) {
 
 }
 
-func expectedSites(codon string) (float64, float64) {
+func expectedSites(codon string) (expNS []float64) {
 	var buffer strings.Builder
 	var codons []string
 	var n, s float64
@@ -251,6 +282,7 @@ func expectedSites(codon string) (float64, float64) {
 	s = 3 - n
 	s, _ = strconv.ParseFloat(fmt.Sprintf("%.5g", s), 64)
 	n, _ = strconv.ParseFloat(fmt.Sprintf("%.5g", n), 64)
-
-	return n, s
+	expNS = append(expNS, n)
+	expNS = append(expNS, s)
+	return expNS
 }

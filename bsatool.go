@@ -582,7 +582,7 @@ func main() {
 			seq := getNucFromGenome(start-1, end)
 			gc, gc1, gc2, gc3 := codon.GcCodonCalc(seq)
 			prod := getProductByName(*infoLocus)
-			fmt.Printf("%v (%v-%v)\n%v\ngc:%v gc1:%v gc2:%v gc3:%v\n", prod, start, end, seq, gc, gc1, gc2, gc3)
+			fmt.Printf("%v (%v-%v)\n%v\ngc:%v gc1:%v gc2:%v gc3:%v Len:%v\n", prod, start, end, seq, gc, gc1, gc2, gc3, len(seq))
 			// fmt.Println(seq, gc, gc1, gc2, gc3, prod)
 		} else {
 			fmt.Println(*infoLocus, " not found!")
@@ -4189,19 +4189,29 @@ func makeMatrix(typeof string, fileOut string) {
 
 			}
 			for _, allloc := range allLocuses {
-				start, end := getGenePosByName(allloc)
-				// prod := getProductByName(allloc)
-				if len(altPositions[allloc]) > 1 {
 
+				// prod := getProductByName(allloc)
+				if len(altPositions[allloc]) > 2 {
+
+					start, end := getGenePosByName(allloc)
 					//
 					refS := getNucFromGenome(start-1, end)
 					altS := makeAltString(start-1, end, altPositions[allloc]) // fmt.Println(val, "\n", refS)
+					// refcnt := 0
+					// if allloc == "Rv0278c" {
+					// 	fmt.Println(len(refS), len(altS))
+					// 	if refcnt == 0 {
+					// 		fmt.Println(refS, len(refS))
+					// 	}
+					// 	fmt.Println(altS, len(altS))
+					// 	refcnt++
 
+					// }
 					qDnDs := &codon.DnDsQuery{RefSeq: refS, AltSeq: altS, OutChan: make(chan codon.DnDs)}
 					go qDnDs.Request()
 					// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
 					dnds := <-qDnDs.OutChan
-
+					close(qDnDs.OutChan)
 					if dnds.ND != 0 && dnds.NS != 0 {
 
 						// fmt.Printf("L:%v\tdNdS:%v\t%v\n", allloc, fmt.Sprintf("%.2f", dnds.DNDS), prod)
