@@ -7,6 +7,506 @@ import (
 	"strings"
 )
 
+var aa = map[string]map[string]string{
+	"TCA": {
+		"LName": "Ser",
+		"SName": "S",
+		"CDA":   "0.5",
+	},
+	"TCC": {
+		"LName": "Ser",
+		"SName": "S",
+		"CDA":   "-0.5",
+	},
+	"TCG": {
+		"LName": "Ser",
+		"SName": "S",
+		"CDA":   "0.5",
+	},
+	"TCT": {
+		"LName": "Ser",
+		"SName": "S",
+		"CDA":   "0",
+	},
+	"TTC": {
+		"LName": "Phe",
+		"SName": "F",
+		"CDA":   "0.5",
+	},
+	"TTT": {
+		"LName": "Phe",
+		"SName": "F",
+		"CDA":   "0",
+	},
+	"TTA": {
+		"LName": "Leu",
+		"SName": "L",
+		"CDA":   "1",
+	},
+	"TTG": {
+		"LName": "Leu",
+		"SName": "L",
+		"CDA":   "1",
+	},
+	"TAC": {
+		"LName": "Tyr",
+		"SName": "Y",
+		"CDA":   "0.5",
+	},
+	"TAT": {
+		"LName": "Tyr",
+		"SName": "Y",
+	},
+	"TAA": {
+		"LName": "X",
+		"SName": "X",
+	},
+	"TAG": {
+		"LName": "X",
+		"SName": "X",
+	},
+	"TGC": {
+		"LName": "Cys",
+		"SName": "C",
+	},
+	"TGT": {
+		"LName": "Cys",
+		"SName": "C",
+	},
+	"TGA": {
+		"LName": "X",
+		"SName": "X",
+	},
+	"TGG": {
+		"LName": "Trp",
+		"SName": "W",
+	},
+	"CTA": {
+		"LName": "Leu",
+		"SName": "L",
+	},
+	"CTC": {
+		"LName": "Leu",
+		"SName": "L",
+	},
+	"CTG": {
+		"LName": "Leu",
+		"SName": "L",
+	},
+	"CTT": {
+		"LName": "Leu",
+		"SName": "L",
+	},
+	"CCA": {
+		"LName": "Pro",
+		"SName": "P",
+	},
+	"CCC": {
+		"LName": "Pro",
+		"SName": "P",
+	},
+	"CCG": {
+		"LName": "Pro",
+		"SName": "P",
+	},
+	"CCT": {
+		"LName": "Pro",
+		"SName": "P",
+	},
+
+	"CAC": {
+		"LName": "His",
+		"SName": "H",
+	},
+	"CAT": {
+		"LName": "His",
+		"SName": "H",
+	},
+	"CAA": {
+		"LName": "Gln",
+		"SName": "Q",
+	},
+	"CAG": {
+		"LName": "Gln",
+		"SName": "Q",
+	},
+	"CGA": {
+		"LName": "Arg",
+		"SName": "R",
+	},
+	"CGC": {
+		"LName": "Arg",
+		"SName": "R",
+	},
+	"CGG": {
+		"LName": "Arg",
+		"SName": "R",
+	},
+	"CGT": {
+		"LName": "Arg",
+		"SName": "R",
+	},
+	"ATA": {
+		"LName": "Ile",
+		"SName": "I",
+	},
+	"ATC": {
+		"LName": "Ile",
+		"SName": "I",
+	},
+	"ATT": {
+		"LName": "Ile",
+		"SName": "I",
+	},
+	"ATG": {
+		"LName": "Met",
+		"SName": "M",
+	},
+	"ACA": {
+		"LName": "Thr",
+		"SName": "T",
+	},
+	"ACC": {
+		"LName": "Thr",
+		"SName": "T",
+	},
+	"ACG": {
+		"LName": "Thr",
+		"SName": "T",
+	},
+	"ACT": {
+		"LName": "Thr",
+		"SName": "T",
+	},
+	"AAC": {
+		"LName": "Asn",
+		"SName": "N",
+	},
+	"AAT": {
+		"LName": "Asn",
+		"SName": "N",
+	},
+	"AAA": {
+		"LName": "Lys",
+		"SName": "K",
+	},
+	"AAG": {
+		"LName": "Lys",
+		"SName": "K",
+	},
+	"AGC": {
+		"LName": "Ser",
+		"SName": "S",
+	},
+	"AGT": {
+		"LName": "Ser",
+		"SName": "S",
+	},
+	"AGA": {
+		"LName": "Arg",
+		"SName": "R",
+	},
+	"AGG": {
+		"LName": "Arg",
+		"SName": "R",
+	},
+	"GTA": {
+		"LName": "Val",
+		"SName": "V",
+	},
+	"GTC": {
+		"LName": "Val",
+		"SName": "V",
+	},
+	"GTG": {
+		"LName": "Val",
+		"SName": "V",
+	},
+	"GTT": {
+		"LName": "Val",
+		"SName": "V",
+	},
+	"GCA": {
+		"LName": "Ala",
+		"SName": "A",
+	},
+	"GCC": {
+		"LName": "Ala",
+		"SName": "A",
+	},
+	"GCG": {
+		"LName": "Ala",
+		"SName": "A",
+	},
+	"GCT": {
+		"LName": "Ala",
+		"SName": "A",
+	},
+	"GAC": {
+		"LName": "Asp",
+		"SName": "D",
+	},
+	"GAT": {
+		"LName": "Asp",
+		"SName": "D",
+	},
+	"GAA": {
+		"LName": "Glu",
+		"SName": "E",
+	},
+	"GAG": {
+		"LName": "Glu",
+		"SName": "E",
+	},
+	"GGA": {
+		"LName": "Gly",
+		"SName": "G",
+	},
+	"GGC": {
+		"LName": "Gly",
+		"SName": "G",
+	},
+	"GGG": {
+		"LName": "Gly",
+		"SName": "G",
+	},
+	"GGT": {
+		"LName": "Gly",
+		"SName": "G",
+	},
+}
+
+var tangIdx = map[string]map[string]float64{
+	"ST": {"Tang": 2.490},
+	"QP": {"Tang": 1.377},
+	"EA": {"Tang": 0.901},
+	"LH": {"Tang": 0.560},
+	"RL": {"Tang": 0.414},
+	"VI": {"Tang": 2.415},
+	"SG": {"Tang": 1.360},
+	"SC": {"Tang": 0.852},
+	"KM": {"Tang": 0.559},
+	"GC": {"Tang": 0.414},
+	"SA": {"Tang": 2.380},
+	"AS": {"Tang": 2.380},
+	"QH": {"Tang": 1.351},
+	"RS": {"Tang": 0.850},
+	"RP": {"Tang": 0.559},
+	"PL": {"Tang": 0.388},
+	"NS": {"Tang": 2.053},
+	"VL": {"Tang": 1.329},
+	"RT": {"Tang": 0.827},
+	"EG": {"Tang": 0.553},
+	"RC": {"Tang": 0.382},
+	"DE": {"Tang": 2.033},
+	"RH": {"Tang": 1.317},
+	"IM": {"Tang": 0.827},
+	"VF": {"Tang": 0.548},
+	"NY": {"Tang": 0.378},
+	"IL": {"Tang": 1.726},
+	"AP": {"Tang": 1.288},
+	"QL": {"Tang": 0.805},
+	"EK": {"Tang": 0.548},
+	"SW": {"Tang": 0.375},
+	"NT": {"Tang": 1.695},
+	"KN": {"Tang": 1.075},
+	"LW": {"Tang": 0.793},
+	"DG": {"Tang": 0.548},
+	"SF": {"Tang": 0.365},
+	"YF": {"Tang": 1.649},
+	"RQ": {"Tang": 1.045},
+	"PH": {"Tang": 0.784},
+	"IF": {"Tang": 0.545},
+	"DV": {"Tang": 0.361},
+	"EQ": {"Tang": 1.634},
+	"SP": {"Tang": 1.039},
+	"TI": {"Tang": 0.750},
+	"SI": {"Tang": 0.540},
+	"CF": {"Tang": 0.321},
+	"LM": {"Tang": 1.601},
+	"AV": {"Tang": 1.017},
+	"LF": {"Tang": 0.732},
+	"GV": {"Tang": 0.539},
+	"NI": {"Tang": 0.321},
+	"TA": {"Tang": 1.587},
+	"DN": {"Tang": 1.015},
+	"SL": {"Tang": 0.725},
+	"RG": {"Tang": 0.534},
+	"CW": {"Tang": 0.271},
+	"RK": {"Tang": 1.583},
+	"TM": {"Tang": 1.007},
+	"KI": {"Tang": 0.688},
+	"EV": {"Tang": 0.506},
+	"CY": {"Tang": 0.268},
+	"KQ": {"Tang": 1.466},
+	"TP": {"Tang": 1.001},
+	"HY": {"Tang": 0.665},
+	"SY": {"Tang": 0.503},
+	"RW": {"Tang": 0.263},
+	"NH": {"Tang": 1.382},
+	"KT": {"Tang": 0.989},
+	"DA": {"Tang": 0.657},
+	"RI": {"Tang": 0.490},
+	"GW": {"Tang": 0.242},
+	"GA": {"Tang": 1.379},
+	"VM": {"Tang": 0.986},
+	"DH": {"Tang": 0.560},
+	"RM": {"Tang": 0.470},
+	"DY": {"Tang": 0.241},
+	"TS": {"Tang": 2.490},
+	"PQ": {"Tang": 1.377},
+	"AE": {"Tang": 0.906},
+	"HL": {"Tang": 0.560},
+	"LR": {"Tang": 0.414},
+	"IV": {"Tang": 2.415},
+	"GS": {"Tang": 1.360},
+	"CS": {"Tang": 0.852},
+	"MK": {"Tang": 0.559},
+	"CG": {"Tang": 0.414},
+	"HQ": {"Tang": 1.351},
+	"SR": {"Tang": 0.850},
+	"PR": {"Tang": 0.559},
+	"LP": {"Tang": 0.388},
+	"SN": {"Tang": 2.053},
+	"LV": {"Tang": 1.329},
+	"TR": {"Tang": 0.827},
+	"GE": {"Tang": 0.553},
+	"CR": {"Tang": 0.382},
+	"ED": {"Tang": 2.033},
+	"HR": {"Tang": 1.317},
+	"MI": {"Tang": 0.827},
+	"FV": {"Tang": 0.548},
+	"YN": {"Tang": 0.378},
+	"LI": {"Tang": 1.726},
+	"PA": {"Tang": 1.288},
+	"LQ": {"Tang": 0.805},
+	"KE": {"Tang": 0.548},
+	"WS": {"Tang": 0.375},
+	"TN": {"Tang": 1.695},
+	"NK": {"Tang": 1.075},
+	"WL": {"Tang": 0.793},
+	"GD": {"Tang": 0.548},
+	"FS": {"Tang": 0.365},
+	"FY": {"Tang": 1.649},
+	"QR": {"Tang": 1.045},
+	"HP": {"Tang": 0.784},
+	"FI": {"Tang": 0.545},
+	"VD": {"Tang": 0.361},
+	"QE": {"Tang": 1.634},
+	"PS": {"Tang": 1.039},
+	"IT": {"Tang": 0.750},
+	"IS": {"Tang": 0.540},
+	"FC": {"Tang": 0.321},
+	"ML": {"Tang": 1.601},
+	"VA": {"Tang": 1.017},
+	"FL": {"Tang": 0.732},
+	"VG": {"Tang": 0.539},
+	"IN": {"Tang": 0.321},
+	"AT": {"Tang": 1.587},
+	"ND": {"Tang": 1.015},
+	"AD": {"Tang": 0.156},
+	"LS": {"Tang": 0.725},
+	"GR": {"Tang": 0.534},
+	"WC": {"Tang": 0.271},
+	"KR": {"Tang": 1.583},
+	"MT": {"Tang": 1.007},
+	"IK": {"Tang": 0.688},
+	"VE": {"Tang": 0.506},
+	"YC": {"Tang": 0.268},
+	"QK": {"Tang": 1.466},
+	"PT": {"Tang": 1.001},
+	"YH": {"Tang": 0.665},
+	"YS": {"Tang": 0.503},
+	"WR": {"Tang": 0.263},
+	"HN": {"Tang": 1.382},
+	"TK": {"Tang": 0.989},
+	"AA": {"Tang": 0.657},
+	"IR": {"Tang": 0.490},
+	"WG": {"Tang": 0.242},
+	"AG": {"Tang": 1.379},
+	"MV": {"Tang": 0.986},
+	"HD": {"Tang": 0.560},
+	"MR": {"Tang": 0.470},
+	"YD": {"Tang": 0.241},
+	"FH": {"Tang": 0},
+	"HE": {"Tang": 0},
+	"QY": {"Tang": 0},
+	"QI": {"Tang": 0},
+	"RA": {"Tang": 0},
+	"HF": {"Tang": 0},
+	"EH": {"Tang": 0},
+	"YQ": {"Tang": 0},
+	"IQ": {"Tang": 0},
+	"AR": {"Tang": 0},
+}
+
+var cdaAA = map[string]map[string]float32{
+	"TCA": {"CDA": 0.5},
+	"TCC": {"CDA": -0.5},
+	"TCG": {"CDA": 0.5},
+	"TCT": {"CDA": 0},
+	"TTC": {"CDA": 0.5},
+	"TTT": {"CDA": 0},
+	"TTA": {"CDA": 1},
+	"TTG": {"CDA": 1},
+	"TAC": {"CDA": 0.5},
+	"TAT": {"CDA": 0},
+	"TAA": {"CDA": -1},
+	"TAG": {"CDA": -0.5},
+	"TGC": {"CDA": 0.5},
+	"TGT": {"CDA": 0},
+	"TGA": {"CDA": -0.5},
+	"TGG": {"CDA": -1},
+	"CTA": {"CDA": 0.5},
+	"CTC": {"CDA": 0},
+	"CTG": {"CDA": 0.5},
+	"CTT": {"CDA": -1},
+	"CCA": {"CDA": 1},
+	"CCC": {"CDA": 0},
+	"CCG": {"CDA": 1},
+	"CCT": {"CDA": 0.5},
+	"CAC": {"CDA": 0},
+	"CAT": {"CDA": 0.5},
+	"CAA": {"CDA": -1},
+	"CAG": {"CDA": 0.5},
+	"CGA": {"CDA": -0.5},
+	"CGC": {"CDA": 0},
+	"CGG": {"CDA": -1},
+	"CGT": {"CDA": -0.5},
+	"ATA": {"CDA": 0},
+	"ATC": {"CDA": -0.5},
+	"ATT": {"CDA": -1},
+	"ATG": {"CDA": -0.5},
+	"ACA": {"CDA": 0},
+	"ACC": {"CDA": -1},
+	"ACG": {"CDA": 0.5},
+	"ACT": {"CDA": -0.5},
+	"AAC": {"CDA": -1},
+	"AAT": {"CDA": 1},
+	"AAA": {"CDA": 0},
+	"AAG": {"CDA": 0.5},
+	"AGC": {"CDA": 0.5},
+	"AGT": {"CDA": 0.5},
+	"AGA": {"CDA": 0},
+	"AGG": {"CDA": -0.5},
+	"GTA": {"CDA": 0.5},
+	"GTC": {"CDA": -0.5},
+	"GTG": {"CDA": 0},
+	"GTT": {"CDA": -1},
+	"GCA": {"CDA": -0.5},
+	"GCC": {"CDA": -1},
+	"GCG": {"CDA": 0},
+	"GCT": {"CDA": -0.5},
+	"GAC": {"CDA": 0.5},
+	"GAT": {"CDA": 0.5},
+	"GAA": {"CDA": -0.5},
+	"GAG": {"CDA": 0},
+	"GGA": {"CDA": 0.5},
+	"GGC": {"CDA": 1},
+	"GGG": {"CDA": 0},
+	"GGT": {"CDA": 1},
+}
+
 func Codon2AA(codon string) (string, string) {
 	/*
 
@@ -14,276 +514,8 @@ func Codon2AA(codon string) (string, string) {
 	 */
 	var Lname, Sname, codonRes string
 	codonRes = strings.ToUpper(codon)
-	AA := map[string]map[string]string{
-		"TCA": {
-			"LName": "Ser",
-			"SName": "S",
-			"CDA":   "0.5",
-		},
-		"TCC": {
-			"LName": "Ser",
-			"SName": "S",
-			"CDA":   "-0.5",
-		},
-		"TCG": {
-			"LName": "Ser",
-			"SName": "S",
-			"CDA":   "0.5",
-		},
-		"TCT": {
-			"LName": "Ser",
-			"SName": "S",
-			"CDA":   "0",
-		},
-		"TTC": {
-			"LName": "Phe",
-			"SName": "F",
-			"CDA":   "0.5",
-		},
-		"TTT": {
-			"LName": "Phe",
-			"SName": "F",
-			"CDA":   "0",
-		},
-		"TTA": {
-			"LName": "Leu",
-			"SName": "L",
-			"CDA":   "1",
-		},
-		"TTG": {
-			"LName": "Leu",
-			"SName": "L",
-			"CDA":   "1",
-		},
-		"TAC": {
-			"LName": "Tyr",
-			"SName": "Y",
-			"CDA":   "0.5",
-		},
-		"TAT": {
-			"LName": "Tyr",
-			"SName": "Y",
-		},
-		"TAA": {
-			"LName": "X",
-			"SName": "X",
-		},
-		"TAG": {
-			"LName": "X",
-			"SName": "X",
-		},
-		"TGC": {
-			"LName": "Cys",
-			"SName": "C",
-		},
-		"TGT": {
-			"LName": "Cys",
-			"SName": "C",
-		},
-		"TGA": {
-			"LName": "X",
-			"SName": "X",
-		},
-		"TGG": {
-			"LName": "Trp",
-			"SName": "W",
-		},
-		"CTA": {
-			"LName": "Leu",
-			"SName": "L",
-		},
-		"CTC": {
-			"LName": "Leu",
-			"SName": "L",
-		},
-		"CTG": {
-			"LName": "Leu",
-			"SName": "L",
-		},
-		"CTT": {
-			"LName": "Leu",
-			"SName": "L",
-		},
-		"CCA": {
-			"LName": "Pro",
-			"SName": "P",
-		},
-		"CCC": {
-			"LName": "Pro",
-			"SName": "P",
-		},
-		"CCG": {
-			"LName": "Pro",
-			"SName": "P",
-		},
-		"CCT": {
-			"LName": "Pro",
-			"SName": "P",
-		},
 
-		"CAC": {
-			"LName": "His",
-			"SName": "H",
-		},
-		"CAT": {
-			"LName": "His",
-			"SName": "H",
-		},
-		"CAA": {
-			"LName": "Gln",
-			"SName": "Q",
-		},
-		"CAG": {
-			"LName": "Gln",
-			"SName": "Q",
-		},
-		"CGA": {
-			"LName": "Arg",
-			"SName": "R",
-		},
-		"CGC": {
-			"LName": "Arg",
-			"SName": "R",
-		},
-		"CGG": {
-			"LName": "Arg",
-			"SName": "R",
-		},
-		"CGT": {
-			"LName": "Arg",
-			"SName": "R",
-		},
-		"ATA": {
-			"LName": "Ile",
-			"SName": "I",
-		},
-		"ATC": {
-			"LName": "Ile",
-			"SName": "I",
-		},
-		"ATT": {
-			"LName": "Ile",
-			"SName": "I",
-		},
-		"ATG": {
-			"LName": "Met",
-			"SName": "M",
-		},
-		"ACA": {
-			"LName": "Thr",
-			"SName": "T",
-		},
-		"ACC": {
-			"LName": "Thr",
-			"SName": "T",
-		},
-		"ACG": {
-			"LName": "Thr",
-			"SName": "T",
-		},
-		"ACT": {
-			"LName": "Thr",
-			"SName": "T",
-		},
-		"AAC": {
-			"LName": "Asn",
-			"SName": "N",
-		},
-		"AAT": {
-			"LName": "Asn",
-			"SName": "N",
-		},
-		"AAA": {
-			"LName": "Lys",
-			"SName": "K",
-		},
-		"AAG": {
-			"LName": "Lys",
-			"SName": "K",
-		},
-		"AGC": {
-			"LName": "Ser",
-			"SName": "S",
-		},
-		"AGT": {
-			"LName": "Ser",
-			"SName": "S",
-		},
-		"AGA": {
-			"LName": "Arg",
-			"SName": "R",
-		},
-		"AGG": {
-			"LName": "Arg",
-			"SName": "R",
-		},
-		"GTA": {
-			"LName": "Val",
-			"SName": "V",
-		},
-		"GTC": {
-			"LName": "Val",
-			"SName": "V",
-		},
-		"GTG": {
-			"LName": "Val",
-			"SName": "V",
-		},
-		"GTT": {
-			"LName": "Val",
-			"SName": "V",
-		},
-		"GCA": {
-			"LName": "Ala",
-			"SName": "A",
-		},
-		"GCC": {
-			"LName": "Ala",
-			"SName": "A",
-		},
-		"GCG": {
-			"LName": "Ala",
-			"SName": "A",
-		},
-		"GCT": {
-			"LName": "Ala",
-			"SName": "A",
-		},
-		"GAC": {
-			"LName": "Asp",
-			"SName": "D",
-		},
-		"GAT": {
-			"LName": "Asp",
-			"SName": "D",
-		},
-		"GAA": {
-			"LName": "Glu",
-			"SName": "E",
-		},
-		"GAG": {
-			"LName": "Glu",
-			"SName": "E",
-		},
-		"GGA": {
-			"LName": "Gly",
-			"SName": "G",
-		},
-		"GGC": {
-			"LName": "Gly",
-			"SName": "G",
-		},
-		"GGG": {
-			"LName": "Gly",
-			"SName": "G",
-		},
-		"GGT": {
-			"LName": "Gly",
-			"SName": "G",
-		},
-	}
-
-	if aa, ok := AA[codonRes]; ok {
+	if aa, ok := aa[codonRes]; ok {
 		// AA[codon]["Lname"], AA[codon]["SName"]
 		Lname = aa["LName"]
 		Sname = aa["SName"]
@@ -300,75 +532,8 @@ func CDACodon(codon string) float32 {
 	var codonRes string
 	var cda float32
 	codonRes = strings.ToUpper(codon)
-	AA := map[string]map[string]float32{
-		"TCA": {"CDA": 0.5},
-		"TCC": {"CDA": -0.5},
-		"TCG": {"CDA": 0.5},
-		"TCT": {"CDA": 0},
-		"TTC": {"CDA": 0.5},
-		"TTT": {"CDA": 0},
-		"TTA": {"CDA": 1},
-		"TTG": {"CDA": 1},
-		"TAC": {"CDA": 0.5},
-		"TAT": {"CDA": 0},
-		"TAA": {"CDA": -1},
-		"TAG": {"CDA": -0.5},
-		"TGC": {"CDA": 0.5},
-		"TGT": {"CDA": 0},
-		"TGA": {"CDA": -0.5},
-		"TGG": {"CDA": -1},
-		"CTA": {"CDA": 0.5},
-		"CTC": {"CDA": 0},
-		"CTG": {"CDA": 0.5},
-		"CTT": {"CDA": -1},
-		"CCA": {"CDA": 1},
-		"CCC": {"CDA": 0},
-		"CCG": {"CDA": 1},
-		"CCT": {"CDA": 0.5},
 
-		"CAC": {"CDA": 0},
-		"CAT": {"CDA": 0.5},
-		"CAA": {"CDA": -1},
-		"CAG": {"CDA": 0.5},
-		"CGA": {"CDA": -0.5},
-		"CGC": {"CDA": 0},
-		"CGG": {"CDA": -1},
-		"CGT": {"CDA": -0.5},
-		"ATA": {"CDA": 0},
-		"ATC": {"CDA": -0.5},
-		"ATT": {"CDA": -1},
-		"ATG": {"CDA": -0.5},
-		"ACA": {"CDA": 0},
-		"ACC": {"CDA": -1},
-		"ACG": {"CDA": 0.5},
-		"ACT": {"CDA": -0.5},
-		"AAC": {"CDA": -1},
-		"AAT": {"CDA": 1},
-		"AAA": {"CDA": 0},
-		"AAG": {"CDA": 0.5},
-		"AGC": {"CDA": 0.5},
-		"AGT": {"CDA": 0.5},
-		"AGA": {"CDA": 0},
-		"AGG": {"CDA": -0.5},
-		"GTA": {"CDA": 0.5},
-		"GTC": {"CDA": -0.5},
-		"GTG": {"CDA": 0},
-		"GTT": {"CDA": -1},
-		"GCA": {"CDA": -0.5},
-		"GCC": {"CDA": -1},
-		"GCG": {"CDA": 0},
-		"GCT": {"CDA": -0.5},
-		"GAC": {"CDA": 0.5},
-		"GAT": {"CDA": 0.5},
-		"GAA": {"CDA": -0.5},
-		"GAG": {"CDA": 0},
-		"GGA": {"CDA": 0.5},
-		"GGC": {"CDA": 1},
-		"GGG": {"CDA": 0},
-		"GGT": {"CDA": 1},
-	}
-
-	if aa, ok := AA[codonRes]; ok {
+	if aa, ok := cdaAA[codonRes]; ok {
 		// AA[codon]["Lname"], AA[codon]["SName"]
 		cda = aa["CDA"]
 		// fmt.Println(Lname, Sname)
@@ -468,172 +633,172 @@ func GetTangInx(refAA string, altAA string) float64 {
 	var res float64
 	buffer.WriteString(refAA)
 	buffer.WriteString(altAA)
-	Tang := make(map[string]float64)
+	// Tang := make(map[string]float64)
 
-	Tang["ST"] = 2.490
-	Tang["QP"] = 1.377
-	Tang["EA"] = 0.906
-	Tang["LH"] = 0.560
-	Tang["RL"] = 0.414
-	Tang["VI"] = 2.415
-	Tang["SG"] = 1.360
-	Tang["SC"] = 0.852
-	Tang["KM"] = 0.559
-	Tang["GC"] = 0.414
-	Tang["SA"] = 2.380
-	Tang["AS"] = 2.380
-	Tang["QH"] = 1.351
-	Tang["RS"] = 0.850
-	Tang["RP"] = 0.559
-	Tang["PL"] = 0.388
-	Tang["NS"] = 2.053
-	Tang["VL"] = 1.329
-	Tang["RT"] = 0.827
-	Tang["EG"] = 0.553
-	Tang["RC"] = 0.382
-	Tang["DE"] = 2.033
-	Tang["RH"] = 1.317
-	Tang["IM"] = 0.827
-	Tang["VF"] = 0.548
-	Tang["NY"] = 0.378
-	Tang["IL"] = 1.726
-	Tang["AP"] = 1.288
-	Tang["QL"] = 0.805
-	Tang["EK"] = 0.548
-	Tang["SW"] = 0.375
-	Tang["NT"] = 1.695
-	Tang["KN"] = 1.075
-	Tang["LW"] = 0.793
-	Tang["DG"] = 0.548
-	Tang["SF"] = 0.365
-	Tang["YF"] = 1.649
-	Tang["RQ"] = 1.045
-	Tang["PH"] = 0.784
-	Tang["IF"] = 0.545
-	Tang["DV"] = 0.361
-	Tang["EQ"] = 1.634
-	Tang["SP"] = 1.039
-	Tang["TI"] = 0.750
-	Tang["SI"] = 0.540
-	Tang["CF"] = 0.321
-	Tang["LM"] = 1.601
-	Tang["AV"] = 1.017
-	Tang["LF"] = 0.732
-	Tang["GV"] = 0.539
-	Tang["NI"] = 0.321
-	Tang["TA"] = 1.587
-	Tang["DN"] = 1.015
-	Tang["SL"] = 0.725
-	Tang["RG"] = 0.534
-	Tang["CW"] = 0.271
-	Tang["RK"] = 1.583
-	Tang["TM"] = 1.007
-	Tang["KI"] = 0.688
-	Tang["EV"] = 0.506
-	Tang["CY"] = 0.268
-	Tang["KQ"] = 1.466
-	Tang["TP"] = 1.001
-	Tang["HY"] = 0.665
-	Tang["SY"] = 0.503
-	Tang["RW"] = 0.263
-	Tang["NH"] = 1.382
-	Tang["KT"] = 0.989
-	Tang["DA"] = 0.657
-	Tang["RI"] = 0.490
-	Tang["GW"] = 0.242
-	Tang["GA"] = 1.379
-	Tang["VM"] = 0.986
-	Tang["DH"] = 0.560
-	Tang["RM"] = 0.470
-	Tang["DY"] = 0.241
-	Tang["TS"] = 2.490
-	Tang["PQ"] = 1.377
-	Tang["AE"] = 0.906
-	Tang["HL"] = 0.560
-	Tang["LR"] = 0.414
-	Tang["IV"] = 2.415
-	Tang["GS"] = 1.360
-	Tang["CS"] = 0.852
-	Tang["MK"] = 0.559
-	Tang["CG"] = 0.414
-	Tang["AS"] = 2.380
-	Tang["SA"] = 2.380
-	Tang["HQ"] = 1.351
-	Tang["SR"] = 0.850
-	Tang["PR"] = 0.559
-	Tang["LP"] = 0.388
-	Tang["SN"] = 2.053
-	Tang["LV"] = 1.329
-	Tang["TR"] = 0.827
-	Tang["GE"] = 0.553
-	Tang["CR"] = 0.382
-	Tang["ED"] = 2.033
-	Tang["HR"] = 1.317
-	Tang["MI"] = 0.827
-	Tang["FV"] = 0.548
-	Tang["YN"] = 0.378
-	Tang["LI"] = 1.726
-	Tang["PA"] = 1.288
-	Tang["LQ"] = 0.805
-	Tang["KE"] = 0.548
-	Tang["WS"] = 0.375
-	Tang["TN"] = 1.695
-	Tang["NK"] = 1.075
-	Tang["WL"] = 0.793
-	Tang["GD"] = 0.548
-	Tang["FS"] = 0.365
-	Tang["FY"] = 1.649
-	Tang["QR"] = 1.045
-	Tang["HP"] = 0.784
-	Tang["FI"] = 0.545
-	Tang["VD"] = 0.361
-	Tang["QE"] = 1.634
-	Tang["PS"] = 1.039
-	Tang["IT"] = 0.750
-	Tang["IS"] = 0.540
-	Tang["FC"] = 0.321
-	Tang["ML"] = 1.601
-	Tang["VA"] = 1.017
-	Tang["FL"] = 0.732
-	Tang["VG"] = 0.539
-	Tang["IN"] = 0.321
-	Tang["AT"] = 1.587
-	Tang["ND"] = 1.015
-	Tang["AD"] = 0.156
-	Tang["LS"] = 0.725
-	Tang["GR"] = 0.534
-	Tang["WC"] = 0.271
-	Tang["KR"] = 1.583
-	Tang["MT"] = 1.007
-	Tang["IK"] = 0.688
-	Tang["VE"] = 0.506
-	Tang["YC"] = 0.268
-	Tang["QK"] = 1.466
-	Tang["PT"] = 1.001
-	Tang["YH"] = 0.665
-	Tang["YS"] = 0.503
-	Tang["WR"] = 0.263
-	Tang["HN"] = 1.382
-	Tang["TK"] = 0.989
-	Tang["AA"] = 0.657
-	Tang["IR"] = 0.490
-	Tang["WG"] = 0.242
-	Tang["AG"] = 1.379
-	Tang["MV"] = 0.986
-	Tang["HD"] = 0.560
-	Tang["MR"] = 0.470
-	Tang["YD"] = 0.241
-	Tang["FH"] = 0
-	Tang["HE"] = 0
-	Tang["QY"] = 0
-	Tang["QI"] = 0
-	Tang["RA"] = 0
-	Tang["HF"] = 0
-	Tang["EH"] = 0
-	Tang["YQ"] = 0
-	Tang["IQ"] = 0
-	Tang["AR"] = 0
-	// Tang["W"] = "-"
+	// Tang["ST"] = 2.490
+	// Tang["QP"] = 1.377
+	// Tang["EA"] = 0.906
+	// Tang["LH"] = 0.560
+	// Tang["RL"] = 0.414
+	// Tang["VI"] = 2.415
+	// Tang["SG"] = 1.360
+	// Tang["SC"] = 0.852
+	// Tang["KM"] = 0.559
+	// Tang["GC"] = 0.414
+	// Tang["SA"] = 2.380
+	// Tang["AS"] = 2.380
+	// Tang["QH"] = 1.351
+	// Tang["RS"] = 0.850
+	// Tang["RP"] = 0.559
+	// Tang["PL"] = 0.388
+	// Tang["NS"] = 2.053
+	// Tang["VL"] = 1.329
+	// Tang["RT"] = 0.827
+	// Tang["EG"] = 0.553
+	// Tang["RC"] = 0.382
+	// Tang["DE"] = 2.033
+	// Tang["RH"] = 1.317
+	// Tang["IM"] = 0.827
+	// Tang["VF"] = 0.548
+	// Tang["NY"] = 0.378
+	// Tang["IL"] = 1.726
+	// Tang["AP"] = 1.288
+	// Tang["QL"] = 0.805
+	// Tang["EK"] = 0.548
+	// Tang["SW"] = 0.375
+	// Tang["NT"] = 1.695
+	// Tang["KN"] = 1.075
+	// Tang["LW"] = 0.793
+	// Tang["DG"] = 0.548
+	// Tang["SF"] = 0.365
+	// Tang["YF"] = 1.649
+	// Tang["RQ"] = 1.045
+	// Tang["PH"] = 0.784
+	// Tang["IF"] = 0.545
+	// Tang["DV"] = 0.361
+	// Tang["EQ"] = 1.634
+	// Tang["SP"] = 1.039
+	// Tang["TI"] = 0.750
+	// Tang["SI"] = 0.540
+	// Tang["CF"] = 0.321
+	// Tang["LM"] = 1.601
+	// Tang["AV"] = 1.017
+	// Tang["LF"] = 0.732
+	// Tang["GV"] = 0.539
+	// Tang["NI"] = 0.321
+	// Tang["TA"] = 1.587
+	// Tang["DN"] = 1.015
+	// Tang["SL"] = 0.725
+	// Tang["RG"] = 0.534
+	// Tang["CW"] = 0.271
+	// Tang["RK"] = 1.583
+	// Tang["TM"] = 1.007
+	// Tang["KI"] = 0.688
+	// Tang["EV"] = 0.506
+	// Tang["CY"] = 0.268
+	// Tang["KQ"] = 1.466
+	// Tang["TP"] = 1.001
+	// Tang["HY"] = 0.665
+	// Tang["SY"] = 0.503
+	// Tang["RW"] = 0.263
+	// Tang["NH"] = 1.382
+	// Tang["KT"] = 0.989
+	// Tang["DA"] = 0.657
+	// Tang["RI"] = 0.490
+	// Tang["GW"] = 0.242
+	// Tang["GA"] = 1.379
+	// Tang["VM"] = 0.986
+	// Tang["DH"] = 0.560
+	// Tang["RM"] = 0.470
+	// Tang["DY"] = 0.241
+	// Tang["TS"] = 2.490
+	// Tang["PQ"] = 1.377
+	// Tang["AE"] = 0.906
+	// Tang["HL"] = 0.560
+	// Tang["LR"] = 0.414
+	// Tang["IV"] = 2.415
+	// Tang["GS"] = 1.360
+	// Tang["CS"] = 0.852
+	// Tang["MK"] = 0.559
+	// Tang["CG"] = 0.414
+	// Tang["AS"] = 2.380
+	// Tang["SA"] = 2.380
+	// Tang["HQ"] = 1.351
+	// Tang["SR"] = 0.850
+	// Tang["PR"] = 0.559
+	// Tang["LP"] = 0.388
+	// Tang["SN"] = 2.053
+	// Tang["LV"] = 1.329
+	// Tang["TR"] = 0.827
+	// Tang["GE"] = 0.553
+	// Tang["CR"] = 0.382
+	// Tang["ED"] = 2.033
+	// Tang["HR"] = 1.317
+	// Tang["MI"] = 0.827
+	// Tang["FV"] = 0.548
+	// Tang["YN"] = 0.378
+	// Tang["LI"] = 1.726
+	// Tang["PA"] = 1.288
+	// Tang["LQ"] = 0.805
+	// Tang["KE"] = 0.548
+	// Tang["WS"] = 0.375
+	// Tang["TN"] = 1.695
+	// Tang["NK"] = 1.075
+	// Tang["WL"] = 0.793
+	// Tang["GD"] = 0.548
+	// Tang["FS"] = 0.365
+	// Tang["FY"] = 1.649
+	// Tang["QR"] = 1.045
+	// Tang["HP"] = 0.784
+	// Tang["FI"] = 0.545
+	// Tang["VD"] = 0.361
+	// Tang["QE"] = 1.634
+	// Tang["PS"] = 1.039
+	// Tang["IT"] = 0.750
+	// Tang["IS"] = 0.540
+	// Tang["FC"] = 0.321
+	// Tang["ML"] = 1.601
+	// Tang["VA"] = 1.017
+	// Tang["FL"] = 0.732
+	// Tang["VG"] = 0.539
+	// Tang["IN"] = 0.321
+	// Tang["AT"] = 1.587
+	// Tang["ND"] = 1.015
+	// Tang["AD"] = 0.156
+	// Tang["LS"] = 0.725
+	// Tang["GR"] = 0.534
+	// Tang["WC"] = 0.271
+	// Tang["KR"] = 1.583
+	// Tang["MT"] = 1.007
+	// Tang["IK"] = 0.688
+	// Tang["VE"] = 0.506
+	// Tang["YC"] = 0.268
+	// Tang["QK"] = 1.466
+	// Tang["PT"] = 1.001
+	// Tang["YH"] = 0.665
+	// Tang["YS"] = 0.503
+	// Tang["WR"] = 0.263
+	// Tang["HN"] = 1.382
+	// Tang["TK"] = 0.989
+	// Tang["AA"] = 0.657
+	// Tang["IR"] = 0.490
+	// Tang["WG"] = 0.242
+	// Tang["AG"] = 1.379
+	// Tang["MV"] = 0.986
+	// Tang["HD"] = 0.560
+	// Tang["MR"] = 0.470
+	// Tang["YD"] = 0.241
+	// Tang["FH"] = 0
+	// Tang["HE"] = 0
+	// Tang["QY"] = 0
+	// Tang["QI"] = 0
+	// Tang["RA"] = 0
+	// Tang["HF"] = 0
+	// Tang["EH"] = 0
+	// Tang["YQ"] = 0
+	// Tang["IQ"] = 0
+	// Tang["AR"] = 0
+	// // Tang["W"] = "-"
 	// Tang["E"] = "-"
 	// Tang["G"] = "-"
 	// Tang["Q"] = "-"
@@ -641,7 +806,7 @@ func GetTangInx(refAA string, altAA string) float64 {
 
 	// fmt.Printf("%v %v %v\n", refAA, altAA, Tang[buffer.String()])
 	if altAA != "" && refAA != "" && altAA != "X" {
-		res = Tang[buffer.String()]
+		res = tangIdx[buffer.String()]["Tang"]
 	} else {
 		res = 0
 	}

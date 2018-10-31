@@ -63,6 +63,7 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 		}()
 		// expNS = expectedSites(strings.ToUpper(rCodon[0]))
 		expNS := <-expNSReq
+		close(expNSReq)
 		expN = expN + expNS[0] //N
 		expS = expS + expNS[1] //S
 
@@ -80,6 +81,7 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 	}()
 
 	ndnsRes := <-ndnsResChan
+	close(ndnsResChan)
 
 	Nd, Ns := ndnsRes[0], ndnsRes[1]
 
