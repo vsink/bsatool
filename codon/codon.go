@@ -34,6 +34,10 @@ func (q *DnDsQuery) Request() {
 
 }
 
+var (
+	nucs = []string{"C", "T", "G", "A"}
+)
+
 // CalcDnDs is....
 func CalcDnDs(refSeq string, altSeq string) DnDs {
 	// var codonPos int
@@ -97,40 +101,49 @@ func CalcDnDs(refSeq string, altSeq string) DnDs {
 }
 
 func getNdNs(refSeqCodons map[int]string, altSeqCodons map[int]string) (ndnsRes []int) {
-	var nd, sd []int
+	var (
+		// nd, sd []int
+		Nd = 0
+		Ns = 0
+	)
 
 	for key, val := range refSeqCodons {
 		for key1, val1 := range altSeqCodons {
-			if key == key1 && val == val1 {
-
-				// fmt.Println("the same:", key+1, val, val1)
-			} else if key == key1 && val != val1 {
+			if key == key1 && val != val1 {
 				_, refAA := amino.Codon2AA(val)
 				_, altAA := amino.Codon2AA(val1)
 				_, diff := codonCompare(val, val1)
+
 				if refAA == altAA && diff == 1 {
 					// mutType = "s"
-					sd = append(sd, 1)
+					// sd = append(sd, 1)
+					Ns++
 				} else if refAA != altAA && diff == 1 {
 					// mutType = "n"
-					nd = append(nd, 1)
+					// nd = append(nd, 1)
+					Nd++
 				} else if refAA != altAA && diff > 1 || refAA == altAA && diff > 1 {
 					// mutType = "n/s"
-					nd = append(nd, 1)
-					sd = append(sd, 1)
+					// nd = append(nd, 1)
+					// sd = append(sd, 1)
+					Nd++
+					Ns++
 				}
 
 			}
 		}
 	}
-	Nd := 0
-	for _, value := range nd {
-		Nd += value
-	}
-	Ns := 0
-	for _, value := range sd {
-		Ns += value
-	}
+
+	// for i := 0; i < len(nd); i++ {
+	// 	Nd += nd[i]
+	// }
+	// for _, value := range nd {
+	// 	Nd += value
+	// }
+
+	// for _, value := range sd {
+	// 	Ns += value
+	// }
 	ndnsRes = append(ndnsRes, Nd) //Nd
 	ndnsRes = append(ndnsRes, Ns) //Ns
 	return ndnsRes
@@ -224,10 +237,10 @@ func expectedSites(codon string) (expNS []float64) {
 	oneThree2Float, _ := oneThree.Float64()
 	_, refAA := amino.Codon2AA(codon)
 	codon2Nuc := strings.SplitAfter(codon, "")
-	nucs := []string{"C", "T", "G", "A"}
 
 	// fmt.Printf("codon:%v\n", refAA)
 	for i, val := range codon2Nuc {
+
 		//pos 1
 		if i == 0 {
 			for _, nuc := range nucs {
