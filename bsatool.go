@@ -624,9 +624,9 @@ func getSnpInfo(apos int, g geneInfo, alt string, flgTang bool) snpInfo {
 	typeOf = g.TypeOf
 
 	if g.Direction == "r" {
-		alt = codonReverse(alt)
-		nucG = codonReverse(nucG)
-		codon = codonReverse(codon)
+		alt = getComplement(alt)
+		nucG = getComplement(nucG)
+		codon = getComplement(codon)
 		posInGene = CPosInGene
 		codonNbrInG = CCodonNbrInG
 
@@ -700,6 +700,21 @@ func getNucFromGenome(start int, end int) string {
 	return result
 
 }
+
+// func getGeneSeq(locus string) {
+// 	var (
+// 		seq string
+// 	)
+// 	start, end := getGenePosByName(locus)
+// 	dir := getDirectionByName(locus)
+// 	if dir == "f" {
+// 		seq = getNucFromGenome(start-1, end)
+// 	} else if dir == "r" {
+// 		seq = getNucFromGenome(start-1, end)
+
+// 	}
+
+// }
 
 func getNucFromGenomePos(pos int) string {
 	/*
@@ -888,7 +903,7 @@ func geneBankFileParser(file string, verbose bool) (g []geneInfo, genomeSplice [
 	var (
 		lDir, lLoc, lName, lProd, lNote, gID, pID, lGOA, lType string
 		lPDBArr, lInterProArr, lProSiteArr                     []string
-		nucCore                                                int
+		nucCore, igrCount                                      int
 		cdsStEnd                                               = regexp.MustCompile(`^(\w+)\s+(\d+)\W+(\d+)|^(\w+)\s+complement\W(\d+)\W+(\d+)`)
 		cdsLocus                                               = regexp.MustCompile(`locus_tag=(.*)`)
 		cdsName                                                = regexp.MustCompile(`gene=(.*)`)
@@ -903,11 +918,11 @@ func geneBankFileParser(file string, verbose bool) (g []geneInfo, genomeSplice [
 
 		startOfBlock, endOfBlock, cdsStart, cdsEnd, lStart, lEnd int
 		// var cdsOpen, cdsClosed int
-		cdsCount = map[string]int{}
-		igensS   []int
-		igensE   []int
+		cdsCount       = map[string]int{}
+		igensS, igensE []int
+
 		leftGene []string
-		igrCount int
+
 	// fmt.Println(extractedData)
 	)
 	for _, val := range extractedData {
@@ -935,18 +950,22 @@ func geneBankFileParser(file string, verbose bool) (g []geneInfo, genomeSplice [
 				for _, cdsStEndMatch := range cdsStEnd.FindAllStringSubmatch(val, -1) {
 
 					if cdsStEndMatch[2] != "" {
+
 						lType = cdsStEndMatch[1]
 						lStart, _ = strconv.Atoi(strings.TrimSpace(cdsStEndMatch[2]))
 						lEnd, _ = strconv.Atoi(strings.TrimSpace(cdsStEndMatch[3]))
+
 						lDir = "f"
 
 						cdsCount[cdsStEndMatch[1]] = cdsCount[cdsStEndMatch[1]] + 1
 
 					} else if cdsStEndMatch[5] != "" {
+
 						lType = cdsStEndMatch[4]
 						lStart, _ = strconv.Atoi(strings.TrimSpace(cdsStEndMatch[5]))
 						lEnd, _ = strconv.Atoi(strings.TrimSpace(cdsStEndMatch[6]))
-						lDir = "f"
+
+						lDir = "r"
 
 						cdsCount[cdsStEndMatch[4]] = cdsCount[cdsStEndMatch[4]] + 1
 
@@ -1049,7 +1068,7 @@ func geneBankFileParser(file string, verbose bool) (g []geneInfo, genomeSplice [
 
 				// geneData[strings.ToUpper(lLoc)] = g
 				if lType == "CDS" {
-					// fmt.Println(lLoc)
+					// fmt.Println(lLoc, lStart, lEnd)
 					geneCoordinates[lLoc] = gCoords{Start: lStart, End: lEnd, Type: "CDS"}
 
 					// if lLoc == "Rv1300" {
@@ -1170,38 +1189,38 @@ func readDB(file string) []geneInfo {
 
 }
 
-func codonReverse(codon string) string {
-	var (
-		lCodonSplit []string
-		result      string
-	)
-	lCodonSplit = strings.Split(codon, "")
-	// fmt.Println(lCodonSplit)
-	for _, n := range lCodonSplit {
+// func codonReverse(codon string) string {
+// 	var (
+// 		lCodonSplit []string
+// 		result      string
+// 	)
+// 	lCodonSplit = strings.Split(codon, "")
+// 	// fmt.Println(lCodonSplit)
+// 	for _, n := range lCodonSplit {
 
-		switch n {
-		case "a":
-			result = "t" + result
-		case "t":
-			result = "a" + result
-		case "c":
-			result = "g" + result
-		case "g":
-			result = "c" + result
-		case "A":
-			result = "T" + result
-		case "T":
-			result = "A" + result
-		case "C":
-			result = "G" + result
-		case "G":
-			result = "C" + result
-		}
+// 		switch n {
+// 		case "a":
+// 			result = "t" + result
+// 		case "t":
+// 			result = "a" + result
+// 		case "c":
+// 			result = "g" + result
+// 		case "g":
+// 			result = "c" + result
+// 		case "A":
+// 			result = "T" + result
+// 		case "T":
+// 			result = "A" + result
+// 		case "C":
+// 			result = "G" + result
+// 		case "G":
+// 			result = "C" + result
+// 		}
 
-	}
-	return result
+// 	}
+// 	return result
 
-}
+// }
 
 //
 
@@ -1993,10 +2012,10 @@ func calcJaroWinklerDist(file string, print bool) []JaroWinklerInfo {
 
 	for _, val := range validData {
 
-		start, end := getGenePosByName(val)
-		altS := makeAltString(start-1, end, altPositions[val])
+		// start, end := getGenePosByName(val)
+		altS := makeAltString(val, altPositions[val])
 		altSequences = append(altSequences, altS)
-		refS := getNucFromGenome(start-1, end)
+		refS := getGeneSequence(val)
 		//  jarwinkl, _ = textdistance.JaroDistance(refS, altS)
 		jarwinkl = smetrics.JaroWinkler(refS, altS, 0.7, 4)
 		jwRes = append(jwRes, JaroWinklerInfo{Locus: val, JWDist: jarwinkl})
@@ -2061,12 +2080,13 @@ func calcGC3Val(snps []snpInfo) []GC3Type {
 
 	for _, loc := range allLocuses {
 
-		start, end := getGenePosByName(loc)
+		// start, end := getGenePosByName(loc)
 		// fmt.Println(start, end, loc)
 		// fmt.Println(start, end, altPositions[	loc], geneCoordinates[strings.ToUpper(loc)])
-		refS := getNucFromGenome(start-1, end)
+		// refS := getNucFromGenome(start-1, end)
+		refS := getGeneSequence(loc)
 		// fmt.Println(refS, end-start)
-		altS := makeAltString(start-1, end, altPositions[loc])
+		altS := makeAltString(loc, altPositions[loc])
 
 		// fmt.Println(altPositions[loc], len(refS), altS, loc)
 		// if len(altS) == 0 {
@@ -2511,7 +2531,7 @@ func testGeneInfo(genes []geneInfo) {
 	}
 }
 
-func makeAltString(start, end int, positions []allPositionsInGene) string {
+func makeAltString(locus string, positions []allPositionsInGene) string {
 	// var lStart, lEnd int
 	var (
 		seqSplit []string
@@ -2519,7 +2539,9 @@ func makeAltString(start, end int, positions []allPositionsInGene) string {
 	)
 	// lStart, lEnd := getGenePosByName(locus)
 
-	seq = getNucFromGenome(start, end)
+	// seq = getNucFromGenome(start, end)
+
+	seq = getGeneSequence(locus)
 
 	for _, nuc := range seq {
 		seqSplit = append(seqSplit, string(nuc))
@@ -2571,6 +2593,20 @@ func getProductByName(locus string) string {
 	}
 
 	return prod
+}
+
+func getDirectionByName(locus string) string {
+	var direction string
+
+	for _, g := range allGenesVal {
+		if strings.ToUpper(locus) == strings.ToUpper(g.Locus) {
+			direction = g.Direction
+
+			break
+		}
+	}
+
+	return direction
 }
 
 func getProductByPos(start, end int) (string, string) {
@@ -4143,10 +4179,10 @@ func getDnDsByLocus(locus string, altPositions []allPositionsInGene) (dndsRes []
 	var (
 		dndsLoc string
 	)
-	start, end := getGenePosByName(locus)
+	// start, end := getGenePosByName(locus)
 
-	refS := getNucFromGenome(start-1, end)
-	altS := makeAltString(start-1, end, altPositions) // fmt.Println(val, "\n", refS)
+	refS := getGeneSequence(locus)
+	altS := makeAltString(locus, altPositions) // fmt.Println(val, "\n", refS)
 
 	qDnDs := &codon.DnDsQuery{RefSeq: refS, AltSeq: altS, OutChan: make(chan codon.DnDs)}
 	go qDnDs.Request()
@@ -4584,6 +4620,7 @@ func makeSeqFromSNPListFile(f string) {
 	var (
 		// parsedSNP    []snpCheckInfo
 		snpCheckChan = make(chan snpCheckInfo)
+		seq          string
 	)
 	file, err := os.Open(f)
 	if err != nil {
@@ -4602,35 +4639,139 @@ func makeSeqFromSNPListFile(f string) {
 			}()
 			snpCheck := <-snpCheckChan
 			if snpCheck.Locus != "" {
-				start, end := getGenePosByName(snpCheck.Locus)
+				// start, end := getGenePosByName(snpCheck.Locus)
 				// parsedSNP = append(parsedSNP, snpCheck)
 
-				if start != 0 && end != 0 {
-					seq := getNucFromGenome(start-1, end)
+				// if start != 0 && end != 0 {
 
-					prod := getProductByName(snpCheck.Locus)
+				dir := getDirectionByName(snpCheck.Locus)
+				// if dir == "f" {
+				// // 	seq = getNucFromGenome(start-1, end)
+				// } else if dir == "r" {
+				// // 	seq = getReverseComplement(getNucFromGenome(start-1, end))
 
-					seqArr := strings.Split(seq, "")
-					posInGene, _ := strconv.Atoi(snpCheck.PosInGene)
-					for i := 0; i < len(seqArr); i++ {
-						if *gbVerbose == true {
+				// }
+				seq = getGeneSequence(snpCheck.Locus)
 
-							seqArr[i] = fmt.Sprintf("%v->%v,", i+1, seqArr[i])
-						}
-						if i+1 == posInGene {
-							seqArr[i] = fmt.Sprintf("[%v_%v>%v]", posInGene, strings.ToUpper(seqArr[i]), snpCheck.Alt)
+				prod := getProductByName(snpCheck.Locus)
+				seqArr := strings.Split(seq, "")
+				posInGene, _ := strconv.Atoi(snpCheck.PosInGene)
+				for i := 0; i < len(seqArr); i++ {
+					if *gbVerbose == true {
+
+						seqArr[i] = fmt.Sprintf("%v->%v,", i+1, seqArr[i])
+					}
+					if i+1 == posInGene {
+						if dir == "f" {
+							seqArr[i] = fmt.Sprintf("[%v>%v]", strings.ToUpper(seqArr[i]), snpCheck.Alt)
+						} else if dir == "r" {
+							seqArr[i] = fmt.Sprintf("[%v>%v]", strings.ToUpper(seqArr[i]), getComplement(snpCheck.Alt))
 						}
 					}
-					// seqArr[posInGene+1] = fmt.Sprintf("(%v_%v>%v)", posInGene, strings.ToUpper(seqArr[posInGene+1]), strings.ToUpper(snp.Alt))
-					altSeq := strings.Join(seqArr, "")
-					// fmt.Println(strings.TrimRight(altSeq, ","))
-					fmt.Printf(">%v_%v_%v>%v (%v) %v\n%v\n", snpCheck.Locus, snpCheck.PosInGene, snpCheck.Ref, snpCheck.Alt, prod, snpCheck.Name, altSeq)
-					// fmt.Println(seqArr[posInGene+1], snp)
-					// fmt.Println(seq, gc, gc1, gc2, gc3, prod)
 				}
+				// seqArr[posInGene+1] = fmt.Sprintf("(%v_%v>%v)", posInGene, strings.ToUpper(seqArr[posInGene+1]), strings.ToUpper(snp.Alt))
+				altSeq := strings.Join(seqArr, "")
+				// fmt.Println(strings.TrimRight(altSeq, ","))
+				fmt.Printf(">%v_%v_%v>%v (%v) %v\n%v\n", snpCheck.Locus, snpCheck.PosInGene, snpCheck.Ref, snpCheck.Alt, prod, snpCheck.Name, altSeq)
+				// fmt.Println("!\n", getReverseComplement(seq))
+				// fmt.Println(seqArr[posInGene+1], snp)
+				// fmt.Println(seq, gc, gc1, gc2, gc3, prod)
+				// }
 
 			}
 		}
 	}
 
+}
+
+func getReverseComplement(sequence string) string {
+	// var (
+	// 	altSeq []string
+	// 	resSeq string
+	// )
+	// var result string
+	seqArr := strings.Split(sequence, "")
+
+	for i := 0; i < len(seqArr); i++ {
+		switch seqArr[i] {
+		case "a":
+			seqArr[i] = "t"
+		case "c":
+			seqArr[i] = "g"
+		case "t":
+			seqArr[i] = "a"
+		case "g":
+			seqArr[i] = "c"
+		case "A":
+			seqArr[i] = "T"
+		case "C":
+			seqArr[i] = "G"
+		case "T":
+			seqArr[i] = "A"
+		case "G":
+			seqArr[i] = "C"
+
+		}
+	}
+	complStr := strings.Join(seqArr, "")
+
+	runes := []rune(complStr)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+
+	return string(runes)
+
+}
+
+func getComplement(sequence string) string {
+	// var (
+	// 	altSeq []string
+	// 	resSeq string
+	// )
+	// var result string
+	seqArr := strings.Split(sequence, "")
+
+	for i := 0; i < len(seqArr); i++ {
+		switch seqArr[i] {
+		case "a":
+			seqArr[i] = "t"
+		case "c":
+			seqArr[i] = "g"
+		case "t":
+			seqArr[i] = "a"
+		case "g":
+			seqArr[i] = "c"
+		case "A":
+			seqArr[i] = "T"
+		case "C":
+			seqArr[i] = "G"
+		case "T":
+			seqArr[i] = "A"
+		case "G":
+			seqArr[i] = "C"
+
+		}
+	}
+	complStr := strings.Join(seqArr, "")
+
+	return complStr
+
+}
+
+func getGeneSequence(locus string) string {
+	var seq string
+	start, end := getGenePosByName(locus)
+	if start != 0 && end != 0 {
+		dir := getDirectionByName(locus)
+		if dir == "f" {
+			seq = getNucFromGenome(start-1, end)
+		} else if dir == "r" {
+			seq = getReverseComplement(getNucFromGenome(start-1, end))
+
+		}
+	} else {
+		fmt.Println("Locus not found [getGeneSequence func]")
+	}
+	return seq
 }
