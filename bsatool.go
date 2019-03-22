@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"math/rand"
+	"os/exec"
+	"runtime"
 	"runtime/pprof"
 	"time"
 
@@ -85,14 +88,16 @@ var (
 	appAuthor = app.Author("V.Sinkov")
 	appVer    = app.Version(version)
 
-	gbWeb     = kingpin.Flag("web", " Open results in web browser").Short('w').Bool()
-	gbXLSX    = kingpin.Flag("xlsx", " Export to XLSX format").Short('x').String()
-	gbVerbose = kingpin.Flag("verbose", "Show additional information ").Short('v').Default("false").Bool()
-	gbIndex   = kingpin.Flag("index", "Calculate Complex Index for amino acid changes").Default("false").Bool()
-	gbPort    = kingpin.Flag("port", "Use your own localhost:port (default:8080)").Default("8080").String()
-	gbNoSeq   = kingpin.Flag("noseq", "Don't show nucleotides").Default("false").Bool()
-	gbDebug   = kingpin.Flag("debug", "Debug mode").Default("false").Bool()
-	gbLog     = kingpin.Flag("log", "write log file").Default("false").Bool()
+	gbWeb          = kingpin.Flag("web", " Open results in web browser").Short('w').Bool()
+	gbXLSX         = kingpin.Flag("xlsx", " Export to XLSX format").Short('x').String()
+	gbVerbose      = kingpin.Flag("verbose", "Show additional information ").Short('v').Default("false").Bool()
+	gbIndex        = kingpin.Flag("index", "Calculate Complex Index for amino acid changes").Default("false").Bool()
+	gbPort         = kingpin.Flag("port", "Use your own localhost:port (default:8080)").Default("8080").String()
+	gbNoSeq        = kingpin.Flag("noseq", "Don't show nucleotides").Default("false").Bool()
+	gbDebug        = kingpin.Flag("debug", "Debug mode").Default("false").Bool()
+	gbLog          = kingpin.Flag("log", "write log file").Default("false").Bool()
+	gbExcludeGenes = kingpin.Flag("exclude-genes", "file with genes which should be excluded from mkseq").String()
+	gbExcludeSnp   = kingpin.Flag("exclude-snp", "file with genes which should be excluded from mkseq").String()
 
 	mkdb      = kingpin.Command("mkdb", "Create database")
 	dbName    = mkdb.Flag("out", "Name of database").Short('o').Required().String()
@@ -109,13 +114,14 @@ var (
 	annWithFilenames = annAction.Flag("wfn", "Show filenames in list annotated VCF's").Short('n').Bool()
 	annInDel         = annAction.Flag("indel", "indel detection").Bool()
 	annBench         = annAction.Flag("annprof", "cpuprofile").String()
+	annSeqLen        = annAction.Flag("len", "indel detection").Int()
 	// annBench         = annAction.Flag("cpuprofile", "cpuprofile").String()
 
 	// compute statistic options
 
 	statAction = kingpin.Command("stat", "Calculates statistic tests").Alias("s")
 	statDB     = statAction.Flag("db", "Database file").Short('b').Required().String()
-	statTask   = statAction.Flag("action", "Type of action:share, snp,dnds, ginfo,bed, matrix,range").Short('a').Required().String()
+	statTask   = statAction.Flag("action", "Type of action:share, snp,dnds, ginfo,bed, matrix,range, circos").Short('a').Required().String()
 	// statWeb     = annAction.Flag("web", "").Short('w').Bool()
 	statInFile  = statAction.Flag("in", "Input file").Short('i').String()
 	statOutFile = statAction.Flag("out", "Output file").Short('o').String()
@@ -124,6 +130,14 @@ var (
 	statAll     = statAction.Flag("all", "show all dNdS results").Default("false").Bool()
 	statBench   = statAction.Flag("statprof", "cpuprofile").String()
 	statMakeSeq = statAction.Flag("mkseq", "make seq from snp filelist").Bool()
+	// statRefGenomeName   = statAction.Flag("ref", "set custom genome name").String()
+	statCircosTypeOf    = statAction.Flag("typeof", "make circos file without IGR regions").String()
+	statCircosBandColor = statAction.Flag("color", "set color to band in circos").String()
+	statCircosGenome    = statAction.Flag("genome", "set color to band in circos").String()
+	statShowAnnotation  = statAction.Flag("annotation", "show annotations to genes").Bool()
+	statNbrOfNSP        = statAction.Flag("snp-number", "number of snp for MST matrix").Int()
+	statNonRandomize    = statAction.Flag("nonrandomize", "Randomize  mst snp matrix").Default("false").Bool()
+	statGroupFromFile   = statAction.Flag("group", "File with filenames and their groups").String()
 	// statMkSeq   = statAction.Flag("mkseq", "").Bool()
 	// statTH      = statAction.Flag("th", "").Int()
 
@@ -131,6 +145,8 @@ var (
 	infoLocus  = infoAction.Flag("locus", "locus name").String()
 	infoDB     = infoAction.Flag("db", "Database file").Short('b').Required().String()
 	infoRanges = infoAction.Flag("range", "start:end").String()
+	infoCodons = infoAction.Flag("codons", "start:end").String()
+	infoShowAs = infoAction.Flag("showas", "Show as:direct (from left to right),gene(direction as in gene) ").String()
 
 	devAction = kingpin.Command("dev", "Developer mode.").Alias("debug")
 	devDB     = devAction.Flag("db", "Database file").Short('b').Required().String()
@@ -159,6 +175,14 @@ var (
 
 	// var geneData = make(map[string]geneInfo)
 	geneCoordinates = make(map[string]gCoords)
+
+	colorReset  = "\x1b[39;49;0m"
+	colorRed    = "\x1b[31;1m"
+	colorGreen  = "\x1b[32;1m"
+	colorYellow = "\x1b[33;1m"
+	colorDbBlue = "\x1b[35;1m"
+	colorBlue   = "\x1b[36;1m"
+	colorWhite  = "\x1b[37;1m"
 )
 
 type (
@@ -192,7 +216,8 @@ type (
 	}
 
 	seqInfo struct {
-		Name, Seq string //
+		Name, Seq     string //
+		UsedPositions []int
 		// Len       int
 	}
 	genomeInfo struct {
@@ -333,34 +358,69 @@ func main() {
 	case "annotate":
 
 		allGenesVal = readDB(*annDB)
+		var (
+			// excludedGenes []string
 
+			exGenes = make(map[int]int)
+			exSNPs  = make(map[int]int)
+		)
 		// go run bsatool.go annotate --vcf list  --db test_core -w
 
-		cpuprofile := *annBench
-		if cpuprofile != "" {
-			f, err := os.Create(cpuprofile)
-			if err != nil {
-				log.Fatal(err)
+		// cpuprofile := *annBench
+		// if cpuprofile != "" {
+		// 	f, err := os.Create(cpuprofile)
+		// 	if err != nil {
+		// 		log.Fatal(err)
+
+		// 	}
+		// 	pprof.StartCPUProfile(f)
+		// 	defer pprof.StopCPUProfile()
+		// }
+
+		if *gbExcludeGenes != "" {
+			if _, err := os.Stat(*gbExcludeGenes); os.IsNotExist(err) {
+				fmt.Println("No file with excluded genes was found")
+				os.Exit(3)
+
+			} else {
+				// exFileGenes = true
+				exGenes = loadExcludeGenes(*gbExcludeGenes)
+			}
+
+			if *gbExcludeSnp != "" {
+				if _, err := os.Stat(*gbExcludeSnp); os.IsNotExist(err) {
+					fmt.Println("No file with excluded SNPs was found")
+					os.Exit(3)
+
+				} else {
+					// exSNPpos = true
+					// fmt.Println(exSNPpos)
+					exSNPs = loadExcludeSNP(*gbExcludeSnp)
+
+				}
 
 			}
-			pprof.StartCPUProfile(f)
-			defer pprof.StopCPUProfile()
+
 		}
+		// fmt.Println(exGenes)
 
 		if *annVCF == "list" || *annVCF == "*" || *annVCF == "all" {
 			if *gbWeb == false && *annMakeSeq == "" {
 				parserBulkVCF(*annWithFilenames)
 				// go run bsatool.go annotate --vcf list --mkseq=NC  --db test_core
 			} else if *gbWeb == true && *annMakeSeq == "NC" {
-				createNCWebServer(*gbPort)
+				createNCWebServer(*gbPort, exGenes, exSNPs)
 			} else if *gbWeb == false && *annMakeSeq == "NC" {
 				// seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef)
-				seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef)
+				seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs)
 				// for _, val := range seq {
 				// 	fmt.Println(val.Seq)
 				// }
 				for i := 0; i < len(seq); i++ {
 					fmt.Println(seq[i].Seq)
+				}
+				if *gbDebug == true {
+					fmt.Println(seq[0].UsedPositions)
 				}
 
 			}
@@ -413,7 +473,7 @@ func main() {
 			getShareSNP(*gbVerbose, *gbWeb, listOfFiles)
 
 		case "snp":
-			//  go run bsatool.go   stat -b test_core  -a share  -v
+			//  go run bsatool.go   stat -b test_core  -a snp  -v
 			snpStat()
 		case "dnds":
 
@@ -433,7 +493,7 @@ func main() {
 			// go run bsatool.go   stat -b test_core  -a ginfo
 			testGeneInfo(allGenesVal)
 		case "circos":
-			//  go run bsatool.go   stat -b test_core  -a circos
+			//  go run bsatool.go   stat -b test_core  -a circos --typeof=[cds,igr] --color=lblue --genome NC_000962
 			toCircos(allGenesVal)
 		case "bed":
 			// go run bsatool.go   stat -b test_core  -a bed
@@ -512,36 +572,82 @@ func main() {
 		}
 	case "info":
 		allGenesVal = readDB(*infoDB)
+		var (
+			seq, direction string
+		)
 		if *infoLocus != "" {
+
 			start, end := getGenePosByName(*infoLocus)
 
 			if start != 0 && end != 0 {
-				seq := getNucFromGenome(start-1, end)
-
-				gc, gc1, gc2, gc3 := codon.GcCodonCalc(seq)
-				prod := getProductByName(*infoLocus)
-
-				fmt.Printf("%v (%v-%v)\n%v\ngc:%v gc1:%v gc2:%v gc3:%v Len:%v\n", prod, start, end, seq, gc, gc1, gc2, gc3, len(seq))
-				snp := checkSNPnotation("Rv1326c	1038G>A	lineage1.1.3 Indo-Oceanic EAI6 RD239")
-				seqArr := strings.Split(seq, "")
-				posInGene, _ := strconv.Atoi(snp.PosInGene)
-				for i := 0; i < len(seqArr); i++ {
-					if *gbVerbose == true {
-
-						seqArr[i] = fmt.Sprintf("%v->%v,", i+1, seqArr[i])
-					}
-					if i+1 == posInGene {
-						seqArr[i] = fmt.Sprintf("[%v_%v>%v]", posInGene, strings.ToUpper(seqArr[i]), snp.Alt)
-					}
+				switch *infoShowAs {
+				case "", "direct":
+					seq = getNucFromGenome(start-1, end)
+					direction = "in forward direction"
+				case "gene":
+					seq = getGeneSequence(*infoLocus)
+					direction = "in gene direction"
 				}
-				// seqArr[posInGene+1] = fmt.Sprintf("(%v_%v>%v)", posInGene, strings.ToUpper(seqArr[posInGene+1]), strings.ToUpper(snp.Alt))
-				altSeq := strings.Join(seqArr, "")
-				fmt.Println(strings.TrimRight(altSeq, ","))
 
-				// fmt.Println(seqArr[posInGene+1], snp)
-				// fmt.Println(seq, gc, gc1, gc2, gc3, prod)
+				prod := getProductByName(*infoLocus)
+				// вывод последовательности кодонов заданной ключом --codons=Start:End
+				if *infoCodons != "" {
+					// seqCodonsMap := map[int]string{}
+
+					seqByCodons := make([]string, (len(seq)/3)+1)
+					codonNbr := 1
+					var codonBuffer strings.Builder
+					for _, c := range seq {
+						codonBuffer.WriteString(string(c))
+						if codonBuffer.Len() == 3 {
+							// seqCodonsMap[codonNbr] = codonBuffer.String()
+							seqByCodons[codonNbr] = codonBuffer.String()
+							// fmt.Println(codonNbr, codonBuffer.String(), seqByCodons[codonNbr])
+							codonBuffer.Reset()
+							codonNbr = codonNbr + 1
+						}
+					}
+					codonsCoords := strings.Split(*infoCodons, ":")
+					startCodon, _ := strconv.Atoi(codonsCoords[0])
+					endCodon, _ := strconv.Atoi(codonsCoords[1])
+					for i := startCodon; i <= endCodon; i++ {
+						if *gbVerbose == false {
+							codonBuffer.WriteString(seqByCodons[i])
+						} else {
+							// codonBuffer.WriteString(seqByCodons[i])
+							codonBuffer.WriteString(fmt.Sprintf("[%v]%v", i, seqByCodons[i]))
+						}
+						// fmt.Println(i, seqCodonsMap[i])
+
+					}
+
+					fmt.Printf(">%v %v [%v:%v codons %v]\n%v\n", *infoLocus, prod, startCodon, endCodon, direction, codonBuffer.String())
+
+				} else {
+					gc, gc1, gc2, gc3 := codon.GcCodonCalc(seq)
+
+					fmt.Printf(">%v %v (%v-%v %v)\n%v\ngc:%v gc1:%v gc2:%v gc3:%v Len:%v\n", *infoLocus, prod, start, end, direction, seq, gc, gc1, gc2, gc3, len(seq))
+					// snp := checkSNPnotation("Rv1326c	1038G>A	lineage1.1.3 Indo-Oceanic EAI6 RD239")
+					// seqArr := strings.Split(seq, "")
+					// posInGene, _ := strconv.Atoi(snp.PosInGene)
+					// for i := 0; i < len(seqArr); i++ {
+					// 	if *gbVerbose == true {
+
+					// 		seqArr[i] = fmt.Sprintf("%v->%v,", i+1, seqArr[i])
+					// 	}
+					// 	if i+1 == posInGene {
+					// 		seqArr[i] = fmt.Sprintf("[%v_%v>%v]", posInGene, strings.ToUpper(seqArr[i]), snp.Alt)
+					// 	}
+					// }
+					// // seqArr[posInGene+1] = fmt.Sprintf("(%v_%v>%v)", posInGene, strings.ToUpper(seqArr[posInGene+1]), strings.ToUpper(snp.Alt))
+					// altSeq := strings.Join(seqArr, "")
+					// fmt.Println(strings.TrimRight(altSeq, ","))
+
+					// fmt.Println(seqArr[posInGene+1], snp)
+					// fmt.Println(seq, gc, gc1, gc2, gc3, prod)
+				}
 			} else {
-				fmt.Println(*infoLocus, " not found!")
+				fmt.Println(colorRed, *infoLocus, " not found!")
 			}
 		} else if *infoRanges != "" {
 			coords := strings.Split(*infoRanges, ":")
@@ -1361,15 +1467,23 @@ func parserBulkVCF(withFilenames bool) {
 
 }
 
-func makeSeq(typeof string, verbose bool, ref bool) []seqInfo {
+func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs map[int]int) []seqInfo {
 
 	var (
-		AllPosUnsort, AllPos []int
-		ResSeq               []seqInfo
+		AllPos, SelectedPos []int
+		ResSeq              []seqInfo
+		// passSNP = make(map[string]int)
+		uniqSNP  = make(map[int]int)
+		nbrOfSNP = 2000
+		// posCount             = make(map[int]int)
 	)
 	// files := getListofVCF()
 
 	// queryChan := make(chan vcfInfoQuery)
+
+	if *annSeqLen != 0 {
+		nbrOfSNP = *annSeqLen
+	}
 
 	files := &listOfFiles
 	for i, file := range *files {
@@ -1386,27 +1500,93 @@ func makeSeq(typeof string, verbose bool, ref bool) []seqInfo {
 	}
 
 	for _, snps := range snpCacheMap {
+
 		for _, val := range snps {
-			AllPosUnsort = append(AllPosUnsort, val.APos)
+			if len(exGenes) != 0 {
+
+				for key, value := range exGenes {
+					if val.APos >= key && val.APos <= value {
+						// fmt.Println(val.Locus, val.Start, val.End, val.Product)
+						// passSNP["genes"] = passSNP["genes"] + 1
+						uniqSNP[val.APos] = 2
+						continue
+					} else if exSNPs[val.APos] == 1 {
+						// passSNP["snp"] = passSNP["snp"] + 1
+						uniqSNP[val.APos] = 2
+						continue
+
+						// fmt.Println(val.APos)
+
+					} else {
+						if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 {
+							uniqSNP[val.APos] = 1
+
+						}
+					}
+				}
+			} else {
+				if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 {
+					uniqSNP[val.APos] = 1
+
+				}
+				// AllPosUnsort = append(AllPosUnsort, val.APos)
+			}
+
+			// if exGenes[val.Locus] != 1 && exSNPs[string(val.APos)] != 1 {
+			// 	AllPosUnsort = append(AllPosUnsort, val.APos)
+			// }
 		}
 	}
 
+	// fmt.Println(uniqSNP)
+
+	for key, value := range uniqSNP {
+
+		if value == 1 {
+
+			AllPos = append(AllPos, key)
+			// } else if value == 2 {
+			// 	fmt.Println(key)
+
+		}
+
+	}
 	// go process("Working...          ")
-	AllPos = unique(AllPosUnsort)
+	// AllPos = unique(AllPosUnsort)
+
 	sort.Ints(AllPos)
+
+	rand.Seed(time.Now().UnixNano())
+
+	if nbrOfSNP > len(AllPos) {
+		nbrOfSNP = len(AllPos) - 1
+	}
+
+	for i := 1; i <= nbrOfSNP; i++ {
+		rnd := rand.Intn(len(AllPos)-i) + i
+		// fmt.Println(AllPos[rnd])
+		SelectedPos = append(SelectedPos, AllPos[rnd])
+	}
+	// fmt.Println(AllPos[0])
+
+	// rand.Intn(max - min) + min
+
+	sort.Ints(SelectedPos)
+
 	if ref == true {
 		switch typeof {
 		case ncFlag:
 			var refBuffer strings.Builder
 			refBuffer.WriteString(fmt.Sprintf(">%v\n", "REFERENCE"))
-			for _, allpos := range AllPos {
+			for _, allpos := range SelectedPos {
 				refBuffer.WriteString(getNucFromGenomePos(allpos))
 			}
-			ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String()})
+			ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String(), UsedPositions: SelectedPos})
 
 		}
 	}
 
+	// fmt.Println(AllPos)
 	for fname, snps := range snpCacheMap {
 
 		// if verbose == true {
@@ -1421,10 +1601,13 @@ func makeSeq(typeof string, verbose bool, ref bool) []seqInfo {
 		case ncFlag:
 			for _, val := range snps {
 				pos[val.APos] = val.Alt
+				// if exGenes[val.Locus] == 1 {
+				// 	fmt.Println(val.Locus)
+				// }
 
 			}
-			for _, allpos := range AllPos {
-
+			for _, allpos := range SelectedPos {
+				// posCount[allpos] = posCount[allpos] + 1
 				if pos[allpos] != "" {
 
 					buffer.WriteString(pos[allpos])
@@ -1432,16 +1615,22 @@ func makeSeq(typeof string, verbose bool, ref bool) []seqInfo {
 
 					buffer.WriteString(getNucFromGenomePos(allpos))
 				}
+
 			}
-			ResSeq = append(ResSeq, seqInfo{Name: fname, Seq: buffer.String()})
+
+			ResSeq = append(ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: SelectedPos})
+			// fmt.Println(len(buffer.String()))
 
 		case aaFlag:
 
 			fmt.Println("Reserved")
 
 		}
-
+		// if *gbDebug == true {
+		// 	fmt.Printf("%v\t:\nThere was passed %v SNPs from exclude gene file\n And %v SNPs from exclude snp file\n", fname, passSNP["genes"], passSNP["snp"])
+		// }
 	}
+
 	return ResSeq
 }
 
@@ -2198,11 +2387,12 @@ func printWebStat(stat []statInfo, port string) {
 	http.ListenAndServe(locPort, nil)
 }
 
-func createNCWebServer(port string) {
+func createNCWebServer(port string, exGenes map[int]int, exSNPs map[int]int) {
 	/*
 
 	 */
-	seq := makeSeq(ncFlag, *gbVerbose, *annMakeSeqRef)
+
+	seq := makeSeq(ncFlag, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs)
 	var htmlTemplate = `
 <!DOCTYPE html>
 <html>
@@ -2224,7 +2414,7 @@ word-wrap: break-word; /* Перенос слов */
 
 
 `
-	browser.OpenURL(fmt.Sprintf("localhost:%v", port))
+
 	t := template.New("t")
 	t, err := t.Parse(htmlTemplate)
 	if err != nil {
@@ -2249,8 +2439,18 @@ word-wrap: break-word; /* Перенос слов */
 	// } else {
 	// 	http.ListenAndServe(":8080", nil)
 	// }
+	// resp, err := http.Get(fmt.Sprintf("http://localhost:%v", port))
+	// if err != nil {
+	// 	fmt.Println("Failed:", err)
+
+	// }
+	// resp.Body.Close()
+	// browser.OpenURL(fmt.Sprintf("localhost:%v", port))
+
 	locPort := fmt.Sprintf(":%v", port)
+
 	http.ListenAndServe(locPort, nil)
+
 	// fmt.Println("Для выхода из программы, нажмите Ctl+C")
 
 }
@@ -2365,11 +2565,13 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 						// buffer.WriteString(fmt.Sprintf("%v_%v:codon%v\t", val.Name, val.Locus, CodonNbrInG))
 					}
 				case tPMN:
+					// fmt.Println(lAPos == snpFromFile.APos)
 					if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v]", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
 						// chkSNP = checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))}
 						// snpArr = append(snpArr, checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))})
 						// buffer.WriteString(fmt.Sprintf("%v_%v:%v_%v>%v\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+
 					}
 				}
 			}
@@ -2513,19 +2715,20 @@ func checkTiTv(ref, alt string) string {
 
 func testGeneInfo(genes []geneInfo) {
 	var (
-		seq               string
-		start, end        int
-		gc, gc1, gc2, gc3 float64
+		prod       string
+		start, end int
+		// gc, gc1, gc2, gc3 float64
 	)
 	for _, g := range genes {
 
 		start = g.Start
 		end = g.End
-		seq = getNucFromGenome(start-1, end)
+		// seq = getGeneSequence(g.Locus)
+		prod = getProductByName(g.Locus)
 
 		if start != 0 && end != 0 && g.TypeOf == "CDS" {
-			gc, gc1, gc2, gc3 = codon.GcCodonCalc(seq)
-			fmt.Printf("%v\t%.2f\t%.2f\t%.2f\t%.2f\n", g.Locus, gc, gc1, gc2, gc3)
+			// gc, gc1, gc2, gc3 = codon.GcCodonCalc(seq)
+			fmt.Printf("%v:%v\t%v\t%v\n", start, end, g.Locus, prod)
 
 		}
 	}
@@ -2650,31 +2853,50 @@ func checkLocus(locus string) int {
 
 func toCircos(genes []geneInfo) {
 	var (
-		seq        string
-		start, end int
-		gc         float64
-		buffer     strings.Builder
+		// seq        string
+		start, end            int
+		bandColor, genomeName string
+		// gc         float64
+		// buffer strings.Builder
 	)
-	fmt.Println("---- ideogram.txt ----")
+	// fmt.Println("---- ideogram.txt ----")
+	if *statCircosBandColor != "" {
+		bandColor = *statCircosBandColor
+	}
+	if *statCircosGenome != "" {
+		genomeName = *statCircosGenome
+	} else {
+		genomeName = gInfo.Strain
+	}
 
-	fmt.Printf("chr -  %v caption %v %v %v\n", gInfo.Strain, gInfo.Start, gInfo.End, gInfo.Strain)
+	fmt.Printf("chr -  %v caption %v %v %v\n", genomeName, gInfo.Start, gInfo.End, gInfo.Strain)
 
 	for _, g := range genes {
 		start = g.Start
 		end = g.End
-		seq = getNucFromGenome(start-1, end)
+		// seq = getNucFromGenome(start-1, end)
 		// fmt.Println(seq)
 		if start != 0 && end != 0 {
-			gc, _, _, _ = codon.GcCodonCalc(seq)
+			// gc, _, _, _ = codon.GcCodonCalc(seq)
+			switch *statCircosTypeOf {
+			case "":
+				fmt.Printf("band %v %v %v %v %v %v\n", genomeName, g.Locus, g.Locus, start, end, bandColor)
+			case "cds":
+				if g.TypeOf == "CDS" {
+					fmt.Printf("band %v %v %v %v %v %v\n", genomeName, g.Locus, g.Locus, start, end, bandColor)
+				}
+			case "igr":
+				if g.TypeOf == "IGR" {
+					fmt.Printf("band %v %v %v %v %v %v\n", genomeName, g.Locus, g.Locus, start, end, bandColor)
+				}
+			}
 
-			fmt.Printf("band %v %v %v %v %v\n", gInfo.Strain, g.Locus, g.Locus, start, end)
-
-			buffer.WriteString(fmt.Sprintf("%v %v %v %.2f\n", gInfo.Strain, start, end, gc))
+			// buffer.WriteString(fmt.Sprintf("%v %v %v %.2f\n", gInfo.Strain, start, end, gc))
 		}
 	}
 
-	fmt.Println("---- histogram.txt ----")
-	fmt.Println(buffer.String())
+	// fmt.Println("---- histogram.txt ----")
+	// fmt.Println(buffer.String())
 
 }
 
@@ -2728,620 +2950,630 @@ func getGeneNameByPos(start, end int) (string, int) {
 	return locName, locLen
 }
 
-func makeMatrixOld(typeof string, fileOut string) {
+// func makeMatrixOld(typeof string, fileOut string) {
 
-	var (
-		AllPos     []int
-		allLocuses []string
-		buffer     strings.Builder
-		headers    strings.Builder
-		posCount   = make(map[int]int)
-	)
-	// var snps []snpInfo
-	// t0 := time.Now()
+// 	var (
+// 		AllPos     []int
+// 		allLocuses []string
+// 		buffer     strings.Builder
+// 		headers    strings.Builder
+// 		posCount   = make(map[int]int)
+// 	)
+// 	// var snps []snpInfo
+// 	// t0 := time.Now()
 
-	// var ResSeq []seqInfo
+// 	// var ResSeq []seqInfo
 
-	// files := getListofVCF()
-	files := &listOfFiles
+// 	// files := getListofVCF()
+// 	files := &listOfFiles
 
-	// if len(snpCacheMap) == 0 {
-	// 	for _, file := range *files {
-	// 		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery)}
-	// 		go qSNP.request()
-	// 		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
-	// 		snpRes := <-qSNP.OutChan
-	// 		snpCacheMap[snpRes.File] = snpRes.SnpInfo
+// 	// if len(snpCacheMap) == 0 {
+// 	// 	for _, file := range *files {
+// 	// 		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery)}
+// 	// 		go qSNP.request()
+// 	// 		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
+// 	// 		snpRes := <-qSNP.OutChan
+// 	// 		snpCacheMap[snpRes.File] = snpRes.SnpInfo
 
-	// 	}
-	// }
+// 	// 	}
+// 	// }
 
-	// fmt.Println(files)
-	// for i, file := range *files {
+// 	// fmt.Println(files)
+// 	// for i, file := range *files {
 
-	// 	fmt.Printf("Preparing files: Working on %v files from %v \r", i+1, len(*files))
+// 	// 	fmt.Printf("Preparing files: Working on %v files from %v \r", i+1, len(*files))
 
-	// 	snpsChan := make(chan []snpInfo)
+// 	// 	snpsChan := make(chan []snpInfo)
 
-	// 	go func() {
-	// 		snpsChan <- makeSnps(file)
-	// 	}()
-	// 	snps = <-snpsChan
+// 	// 	go func() {
+// 	// 		snpsChan <- makeSnps(file)
+// 	// 	}()
+// 	// 	snps = <-snpsChan
 
-	// 	for _, val := range snps {
-	// 		AllPosUnsort = append(AllPosUnsort, val.APos)
-	// 		posCount[val.APos] = posCount[val.APos] + 1
-	// 		if val.TypeOf == "CDS" {
-	// 			allLocusUnsort = append(allLocusUnsort, val.Locus)
-	// 		}
+// 	// 	for _, val := range snps {
+// 	// 		AllPosUnsort = append(AllPosUnsort, val.APos)
+// 	// 		posCount[val.APos] = posCount[val.APos] + 1
+// 	// 		if val.TypeOf == "CDS" {
+// 	// 			allLocusUnsort = append(allLocusUnsort, val.Locus)
+// 	// 		}
 
-	// 	}
-	// }
+// 	// 	}
+// 	// }
 
-	// AllPos = unique(AllPosUnsort)
-	// allLocuses = removeStringDuplicates(allLocusUnsort)
+// 	// AllPos = unique(AllPosUnsort)
+// 	// allLocuses = removeStringDuplicates(allLocusUnsort)
 
-	// sort.Ints(AllPos)
+// 	// sort.Ints(AllPos)
 
-	// fmt.Println(snpCacheMap)
+// 	// fmt.Println(snpCacheMap)
 
-	switch typeof {
+// 	switch typeof {
 
-	case "binary":
+// 	case "binary":
 
-		matrixBinary(fmt.Sprintf("%v_1", fileOut))
-		// pos := make(map[int]string)
+// 		matrixBinary(fmt.Sprintf("%v_1", fileOut))
+// 		// pos := make(map[int]string)
 
-		// var posFN = make(map[int][]string)
-		// var posFreq = map[int][]string{}
+// 		// var posFN = make(map[int][]string)
+// 		// var posFreq = map[int][]string{}
 
-		// headers.WriteString("Pos\t")
+// 		// headers.WriteString("Pos\t")
 
-		// for i, file := range *files {
-		// 	headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+// 		// for i, file := range *files {
+// 		// 	headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
 
-		// 	fmt.Printf("Counting SNP positions: Working on %v files from %v \r", i+1, len(*files))
+// 		// 	fmt.Printf("Counting SNP positions: Working on %v files from %v \r", i+1, len(*files))
 
-		// 	snpsChan := make(chan []snpInfo)
+// 		// 	snpsChan := make(chan []snpInfo)
 
-		// 	go func() {
-		// 		snpsChan <- makeSnps(file)
-		// 	}()
-		// 	snps = <-snpsChan
+// 		// 	go func() {
+// 		// 		snpsChan <- makeSnps(file)
+// 		// 	}()
+// 		// 	snps = <-snpsChan
 
-		// 	for _, val := range snps {
+// 		// 	for _, val := range snps {
 
-		// 		pos[val.APos] = val.Alt
-		// 		// posTest = append(posTest, posByFile{pos: pos, file: file, apos: val.APos})
-		// 		if strings.Contains(strings.Join(posFN[val.APos], " "), file) == false {
-		// 			posFN[val.APos] = append(posFN[val.APos], file)
-		// 		}
+// 		// 		pos[val.APos] = val.Alt
+// 		// 		// posTest = append(posTest, posByFile{pos: pos, file: file, apos: val.APos})
+// 		// 		if strings.Contains(strings.Join(posFN[val.APos], " "), file) == false {
+// 		// 			posFN[val.APos] = append(posFN[val.APos], file)
+// 		// 		}
 
-		// 		AllPosUnsort = append(AllPosUnsort, val.APos)
-		// 		posCount[val.APos] = posCount[val.APos] + 1
-		// 		if val.TypeOf == "CDS" {
-		// 			allLocusUnsort = append(allLocusUnsort, val.Locus)
-		// 		}
+// 		// 		AllPosUnsort = append(AllPosUnsort, val.APos)
+// 		// 		posCount[val.APos] = posCount[val.APos] + 1
+// 		// 		if val.TypeOf == "CDS" {
+// 		// 			allLocusUnsort = append(allLocusUnsort, val.Locus)
+// 		// 		}
 
-		// 	}
+// 		// 	}
 
-		// }
-		// AllPos = unique(AllPosUnsort)
-		// allLocuses = removeStringDuplicates(allLocusUnsort)
-		// sort.Ints(AllPos)
+// 		// }
+// 		// AllPos = unique(AllPosUnsort)
+// 		// allLocuses = removeStringDuplicates(allLocusUnsort)
+// 		// sort.Ints(AllPos)
 
-		// for _, file := range *files {
-		// 	for _, allpos := range AllPos {
+// 		// for _, file := range *files {
+// 		// 	for _, allpos := range AllPos {
 
-		// 		if strings.Contains(strings.Join(posFN[allpos], " "), file) {
+// 		// 		if strings.Contains(strings.Join(posFN[allpos], " "), file) {
 
-		// 			posFreq[allpos] = append(posFreq[allpos], "1")
-		// 		} else {
-		// 			// fmt.Println(allpos, 0, file)
-		// 			posFreq[allpos] = append(posFreq[allpos], "0")
-		// 		}
+// 		// 			posFreq[allpos] = append(posFreq[allpos], "1")
+// 		// 		} else {
+// 		// 			// fmt.Println(allpos, 0, file)
+// 		// 			posFreq[allpos] = append(posFreq[allpos], "0")
+// 		// 		}
 
-		// 	}
-		// }
+// 		// 	}
+// 		// }
 
-		// for _, allpos := range AllPos {
-		// 	if posCount[allpos] < len(*files) {
+// 		// for _, allpos := range AllPos {
+// 		// 	if posCount[allpos] < len(*files) {
 
-		// 		buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
+// 		// 		buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
 
-		// 	}
-		// }
-		// headers.WriteString("\n")
+// 		// 	}
+// 		// }
+// 		// headers.WriteString("\n")
 
-	// case "binary":
-	// 	var posFreq = map[int][]string{}
-	// 	pos := make(map[int]string)
-	// 	// posarr := make(map[string][]map[int]string)
-	// 	headers.WriteString("Pos\t")
+// 	// case "binary":
+// 	// 	var posFreq = map[int][]string{}
+// 	// 	pos := make(map[int]string)
+// 	// 	// posarr := make(map[string][]map[int]string)
+// 	// 	headers.WriteString("Pos\t")
 
-	// 	// for i, file := range files {
-	// 	// for fname, snps := range snpCacheMap {
-	// 	// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
-	// 	for i, file := range *files {
-	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+// 	// 	// for i, file := range files {
+// 	// 	// for fname, snps := range snpCacheMap {
+// 	// 	// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+// 	// 	for i, file := range *files {
+// 	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
 
-	// 		fmt.Printf("Preparing files: Working on %v files from %v \r", i+1, len(*files))
+// 	// 		fmt.Printf("Preparing files: Working on %v files from %v \r", i+1, len(*files))
 
-	// 		snpsChan := make(chan []snpInfo)
+// 	// 		snpsChan := make(chan []snpInfo)
 
-	// 		go func() {
-	// 			snpsChan <- makeSnps(file)
-	// 		}()
-	// 		snps = <-snpsChan
+// 	// 		go func() {
+// 	// 			snpsChan <- makeSnps(file)
+// 	// 		}()
+// 	// 		snps = <-snpsChan
 
-	// 		for _, val := range snps {
+// 	// 		for _, val := range snps {
 
-	// 			pos[val.APos] = val.Alt
-	// 			// posarr[file] = append(posarr[file], pos)
-	// 			AllPosUnsort = append(AllPosUnsort, val.APos)
-	// 			posCount[val.APos] = posCount[val.APos] + 1
-	// 			if val.TypeOf == "CDS" {
-	// 				allLocusUnsort = append(allLocusUnsort, val.Locus)
-	// 			}
+// 	// 			pos[val.APos] = val.Alt
+// 	// 			// posarr[file] = append(posarr[file], pos)
+// 	// 			AllPosUnsort = append(AllPosUnsort, val.APos)
+// 	// 			posCount[val.APos] = posCount[val.APos] + 1
+// 	// 			if val.TypeOf == "CDS" {
+// 	// 				allLocusUnsort = append(allLocusUnsort, val.Locus)
+// 	// 			}
 
-	// 		}
+// 	// 		}
 
-	// 	}
-	// 	// fmt.Println(posarr)
-	// 	AllPos = unique(AllPosUnsort)
-	// 	allLocuses = removeStringDuplicates(allLocusUnsort)
-	// 	sort.Ints(AllPos)
+// 	// 	}
+// 	// 	// fmt.Println(posarr)
+// 	// 	AllPos = unique(AllPosUnsort)
+// 	// 	allLocuses = removeStringDuplicates(allLocusUnsort)
+// 	// 	sort.Ints(AllPos)
 
-	// 	for _, file := range *files {
-	// 		for _, allpos := range AllPos {
-	// 			if posCount[allpos] < len(*files) {
+// 	// 	for _, file := range *files {
+// 	// 		for _, allpos := range AllPos {
+// 	// 			if posCount[allpos] < len(*files) {
 
-	// 				if pos[allpos] != "" {
+// 	// 				if pos[allpos] != "" {
 
-	// 					posFreq[allpos] = append(posFreq[allpos], "1")
+// 	// 					posFreq[allpos] = append(posFreq[allpos], "1")
 
-	// 				} else {
+// 	// 				} else {
 
-	// 					posFreq[allpos] = append(posFreq[allpos], "0")
+// 	// 					posFreq[allpos] = append(posFreq[allpos], "0")
 
-	// 				}
-	// 			}
+// 	// 				}
+// 	// 			}
 
-	// 		}
-	// 		fmt.Println(file)
-	// 	}
-	// 	for _, allpos := range AllPos {
-	// 		if posCount[allpos] < len(*files) {
+// 	// 		}
+// 	// 		fmt.Println(file)
+// 	// 	}
+// 	// 	for _, allpos := range AllPos {
+// 	// 		if posCount[allpos] < len(*files) {
 
-	// 			buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
+// 	// 			buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
 
-	// 		}
-	// 	}
-	// 	headers.WriteString("\n")
+// 	// 		}
+// 	// 	}
+// 	// 	headers.WriteString("\n")
 
-	case "table":
-		var posFreq = map[int][]string{}
-		pos := make(map[int]string)
+// 	case "table":
+// 		var posFreq = map[int][]string{}
+// 		pos := make(map[int]string)
 
-		// headers.WriteString("Pos\t")
+// 		// headers.WriteString("Pos\t")
 
-		for fname, snps := range snpCacheMap {
-			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+// 		for fname, snps := range snpCacheMap {
+// 			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
 
-			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-			// snps := parserVCF(file, false, allGenesVal)
+// 			// snps := parserVCF(file, false, allGenesVal)
 
-			for _, val := range snps {
+// 			for _, val := range snps {
 
-				pos[val.APos] = val.Alt
+// 				pos[val.APos] = val.Alt
 
-			}
+// 			}
 
-			for _, allpos := range AllPos {
-				if posCount[allpos] < len(*files) {
-					if pos[allpos] != "" {
-						posFreq[allpos] = append(posFreq[allpos], strconv.Itoa(allpos))
+// 			for _, allpos := range AllPos {
+// 				if posCount[allpos] < len(*files) {
+// 					if pos[allpos] != "" {
+// 						posFreq[allpos] = append(posFreq[allpos], strconv.Itoa(allpos))
 
-					} else {
-						posFreq[allpos] = append(posFreq[allpos], "0")
+// 					} else {
+// 						posFreq[allpos] = append(posFreq[allpos], "0")
 
-					}
-				}
+// 					}
+// 				}
 
-			}
-		}
-		for _, allpos := range AllPos {
-			if posCount[allpos] < len(*files) {
+// 			}
+// 		}
+// 		for _, allpos := range AllPos {
+// 			if posCount[allpos] < len(*files) {
 
-				buffer.WriteString(fmt.Sprintln(strings.Join(posFreq[allpos], "\t")))
+// 				buffer.WriteString(fmt.Sprintln(strings.Join(posFreq[allpos], "\t")))
 
-			}
-		}
-		headers.WriteString("\n")
+// 			}
+// 		}
+// 		headers.WriteString("\n")
 
-	case "nc":
-		var posFreq = map[int][]string{}
-		pos := make(map[int]string)
+// 	case "nc":
+// 		var posFreq = map[int][]string{}
+// 		pos := make(map[int]string)
 
-		headers.WriteString("Pos\tRef\t")
+// 		headers.WriteString("Pos\tRef\t")
 
-		// for i, file := range files {
-		for fname, snps := range snpCacheMap {
-			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+// 		// for i, file := range files {
+// 		for fname, snps := range snpCacheMap {
+// 			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
 
-			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-			// snps := parserVCF(file, false, allGenesVal)
+// 			// snps := parserVCF(file, false, allGenesVal)
 
-			for _, val := range snps {
+// 			for _, val := range snps {
 
-				pos[val.APos] = val.Alt
+// 				pos[val.APos] = val.Alt
 
-			}
+// 			}
 
-			for _, allpos := range AllPos {
+// 			for _, allpos := range AllPos {
 
-				if pos[allpos] != "" {
-					posFreq[allpos] = append(posFreq[allpos], fmt.Sprintf("%v", pos[allpos]))
+// 				if pos[allpos] != "" {
+// 					posFreq[allpos] = append(posFreq[allpos], fmt.Sprintf("%v", pos[allpos]))
 
-				} else {
-					posFreq[allpos] = append(posFreq[allpos], getNucFromGenomePos(allpos))
+// 				} else {
+// 					posFreq[allpos] = append(posFreq[allpos], getNucFromGenomePos(allpos))
 
-				}
+// 				}
 
-			}
-		}
-		for _, allpos := range AllPos {
-			// if buffer.Len() == 0 {
-			buffer.WriteString(fmt.Sprintln(allpos, "\t", getNucFromGenomePos(allpos), "\t", strings.Join(posFreq[allpos], "\t")))
+// 			}
+// 		}
+// 		for _, allpos := range AllPos {
+// 			// if buffer.Len() == 0 {
+// 			buffer.WriteString(fmt.Sprintln(allpos, "\t", getNucFromGenomePos(allpos), "\t", strings.Join(posFreq[allpos], "\t")))
 
-		}
-		headers.WriteString("\n")
+// 		}
+// 		headers.WriteString("\n")
 
-	case "locus":
-		var (
-			i          int
-			locFreq    = map[string][]string{}
-			locusCount = make(map[string]int)
-		)
-		headers.WriteString("Locus\t")
+// 	case "locus":
+// 		var (
+// 			i          int
+// 			locFreq    = map[string][]string{}
+// 			locusCount = make(map[string]int)
+// 		)
+// 		headers.WriteString("Locus\t")
 
-		// for i, file := range files {
-		for fname, snps := range snpCacheMap {
-			i++
-			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+// 		// for i, file := range files {
+// 		for fname, snps := range snpCacheMap {
+// 			i++
+// 			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
 
-			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-			// snps := parserVCF(file, false, allGenesVal)
+// 			// snps := parserVCF(file, false, allGenesVal)
 
-			for _, val := range snps {
+// 			for _, val := range snps {
 
-				locusCount[fmt.Sprintf("%v_%v", val.Locus, i)] = locusCount[fmt.Sprintf("%v_%v", val.Locus, i)] + 1
+// 				locusCount[fmt.Sprintf("%v_%v", val.Locus, i)] = locusCount[fmt.Sprintf("%v_%v", val.Locus, i)] + 1
 
-			}
-			for _, allloc := range allLocuses {
+// 			}
+// 			for _, allloc := range allLocuses {
 
-				locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[fmt.Sprintf("%v_%v", allloc, i)]))
+// 				locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[fmt.Sprintf("%v_%v", allloc, i)]))
 
-			}
+// 			}
 
-		}
+// 		}
 
-		for _, allloc := range allLocuses {
+// 		for _, allloc := range allLocuses {
 
-			buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Join(locFreq[allloc], "\t")))
+// 			buffer.WriteString(fmt.Sprintln(allloc, "\t", strings.Join(locFreq[allloc], "\t")))
 
-		}
+// 		}
 
-		headers.WriteString("\n")
+// 		headers.WriteString("\n")
 
-	case "freq":
-		headers.WriteString("Pos\tFreq\n")
+// 	case "freq":
+// 		headers.WriteString("Pos\tFreq\n")
 
-		for _, allpos := range AllPos {
+// 		for _, allpos := range AllPos {
 
-			// headers.WriteString(fmt.Sprintf("P%v\n", allpos))
-			buffer.WriteString(fmt.Sprintf("P%v\t%v\n", allpos, posCount[allpos]))
+// 			// headers.WriteString(fmt.Sprintf("P%v\n", allpos))
+// 			buffer.WriteString(fmt.Sprintf("P%v\t%v\n", allpos, posCount[allpos]))
 
-		}
+// 		}
 
-	// case "dnds":
-	// 	// var dnds [][]DnDsRes
-	// 	var locDNDS = map[string][]string{}
-	// 	// var locDNDSTest = map[string][]string{}
-	// 	// var dndsArr []string
-	// 	var i int
+// 	// case "dnds":
+// 	// 	// var dnds [][]DnDsRes
+// 	// 	var locDNDS = map[string][]string{}
+// 	// 	// var locDNDSTest = map[string][]string{}
+// 	// 	// var dndsArr []string
+// 	// 	var i int
 
-	// 	prompt := bufio.NewReader(os.Stdin)
-	// 	fmt.Printf("It will take some time(~%v min). Continue?: ", len(*files))
-	// 	yesNo, _ := prompt.ReadString('\n')
+// 	// 	prompt := bufio.NewReader(os.Stdin)
+// 	// 	fmt.Printf("It will take some time(~%v min). Continue?: ", len(*files))
+// 	// 	yesNo, _ := prompt.ReadString('\n')
 
-	// 	if yesNo == "y\n" || yesNo == "Y\n" {
-	// 		headers.WriteString("Locus\t")
+// 	// 	if yesNo == "y\n" || yesNo == "Y\n" {
+// 	// 		headers.WriteString("Locus\t")
 
-	// 		// for i, file := range files {
-	// 		for fname := range snpCacheMap {
-	// 			i++
-	// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 	// 		// for i, file := range files {
+// 	// 		for fname := range snpCacheMap {
+// 	// 			i++
+// 	// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-	// 			fmt.Printf("Calculating Dn/DS: Working on %v from %v (%v) \r", i, len(*files), fname)
+// 	// 			fmt.Printf("Calculating Dn/DS: Working on %v from %v (%v) \r", i, len(*files), fname)
 
-	// 			dnds := calcDnDsVal(fname, *gbVerbose)
+// 	// 			dnds := calcDnDsVal(fname, *gbVerbose)
 
-	// 			// fmt.Println(fname, "\t", dnds)
-	// 			for _, dndsVal := range dnds {
+// 	// 			// fmt.Println(fname, "\t", dnds)
+// 	// 			for _, dndsVal := range dnds {
 
-	// 				locDNDS[strings.Split(dndsVal.Locus, ":")[0]] = append(locDNDS[strings.Split(dndsVal.Locus, ":")[0]], fmt.Sprintf("%.2f", dndsVal.DNDS))
+// 	// 				locDNDS[strings.Split(dndsVal.Locus, ":")[0]] = append(locDNDS[strings.Split(dndsVal.Locus, ":")[0]], fmt.Sprintf("%.2f", dndsVal.DNDS))
 
-	// 			}
+// 	// 			}
 
-	// 			// for _, allloc := range allLocuses {
-	// 			// 	// dndsArr = locDNDSTest[allloc]
-	// 			// 	// found := 0
-	// 			// 	for _, dndsVal := range dnds {
+// 	// 			// for _, allloc := range allLocuses {
+// 	// 			// 	// dndsArr = locDNDSTest[allloc]
+// 	// 			// 	// found := 0
+// 	// 			// 	for _, dndsVal := range dnds {
 
-	// 			// 		if strings.Split(dndsVal.Locus, ":")[0] == allloc {
-	// 			// 			dndsArr = append(dndsArr, fmt.Sprintf("%.2f", dndsVal.DNDS))
-	// 			// 			// found = 1
-	// 			// 			// } else {
-	// 			// 			// 	dndsArr = append(dndsArr, "1")
-	// 			// 		}
+// 	// 			// 		if strings.Split(dndsVal.Locus, ":")[0] == allloc {
+// 	// 			// 			dndsArr = append(dndsArr, fmt.Sprintf("%.2f", dndsVal.DNDS))
+// 	// 			// 			// found = 1
+// 	// 			// 			// } else {
+// 	// 			// 			// 	dndsArr = append(dndsArr, "1")
+// 	// 			// 		}
 
-	// 			// 	}
-	// 			// 	locDNDSTest[allloc] = dndsArr
-	// 			// 	// dndsArr = nil
+// 	// 			// 	}
+// 	// 			// 	locDNDSTest[allloc] = dndsArr
+// 	// 			// 	// dndsArr = nil
 
-	// 			// }
+// 	// 			// }
 
-	// 			// j++
+// 	// 			// j++
 
-	// 		}
+// 	// 		}
 
-	// 		// fmt.Println(locDNDSTest)
-	// 		for _, allloc := range allLocuses {
+// 	// 		// fmt.Println(locDNDSTest)
+// 	// 		for _, allloc := range allLocuses {
 
-	// 			// fmt.Println(allloc, locDNDS[allloc], len(locDNDS[allloc]))
-	// 			if len(locDNDS[allloc]) != 0 {
-	// 				rpt := strings.Repeat("1\t", len(*files)-len(locDNDS[allloc]))
-	// 				locDNDS[allloc] = append(locDNDS[allloc], rpt)
-	// 				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
+// 	// 			// fmt.Println(allloc, locDNDS[allloc], len(locDNDS[allloc]))
+// 	// 			if len(locDNDS[allloc]) != 0 {
+// 	// 				rpt := strings.Repeat("1\t", len(*files)-len(locDNDS[allloc]))
+// 	// 				locDNDS[allloc] = append(locDNDS[allloc], rpt)
+// 	// 				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
 
-	// 			}
+// 	// 			}
 
-	// 		}
+// 	// 		}
 
-	// 		headers.WriteString("\n")
+// 	// 		headers.WriteString("\n")
 
-	// 	}
-	case "dnds":
-		matrixDnDs(fileOut)
-	// case "dnds":
+// 	// 	}
+// 	case "dnds":
+// 		matrixDnDs(fileOut)
+// 	// case "dnds":
 
-	// 	var altPositions = make(map[string][]allPositionsInGene)
-	// 	var locDNDS = map[string][]string{}
-	// 	var countNbrOne = make(map[string]int)
+// 	// 	var altPositions = make(map[string][]allPositionsInGene)
+// 	// 	var locDNDS = map[string][]string{}
+// 	// 	var countNbrOne = make(map[string]int)
 
-	// 	i := 0
-	// 	headers.WriteString("Locus\t")
+// 	// 	i := 0
+// 	// 	headers.WriteString("Locus\t")
 
-	// 	for key := range geneCoordinates {
-	// 		allLocuses = append(allLocuses, key)
-	// 	}
+// 	// 	for key := range geneCoordinates {
+// 	// 		allLocuses = append(allLocuses, key)
+// 	// 	}
 
-	// 	for _, fname := range *files {
-	// 		i++
+// 	// 	for _, fname := range *files {
+// 	// 		i++
 
-	// 		snpsChan := make(chan []snpInfo)
+// 	// 		snpsChan := make(chan []snpInfo)
 
-	// 		go func() {
-	// 			snpsChan <- makeSnps(fname)
-	// 		}()
-	// 		snps = <-snpsChan
+// 	// 		go func() {
+// 	// 			snpsChan <- makeSnps(fname)
+// 	// 		}()
+// 	// 		snps = <-snpsChan
 
-	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-	// 		t1 := time.Now()
+// 	// 		t1 := time.Now()
 
-	// 		fmt.Printf("Calculating Dn/DS: Working on %v from %v (%v)\r", i, len(*files), fname)
-	// 		for _, val := range snps {
-	// 			if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
+// 	// 		fmt.Printf("Calculating Dn/DS: Working on %v from %v (%v)\r", i, len(*files), fname)
+// 	// 		for _, val := range snps {
+// 	// 			if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
 
-	// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
-	// 			}
+// 	// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+// 	// 			}
 
-	// 		}
+// 	// 		}
 
-	// 		for _, allloc := range allLocuses {
+// 	// 		for _, allloc := range allLocuses {
 
-	// 			// prod := getProductByName(allloc)
-	// 			if len(altPositions[allloc]) > 2 {
-	// 				dndsChan := make(chan []string)
-	// 				go func() {
+// 	// 			// prod := getProductByName(allloc)
+// 	// 			if len(altPositions[allloc]) > 2 {
+// 	// 				dndsChan := make(chan []string)
+// 	// 				go func() {
 
-	// 					dndsChan <- getDnDsByLocus(allloc, altPositions[allloc])
-	// 				}()
-	// 				dndsRes, ok := <-dndsChan
-	// 				if ok {
-	// 					// fmt.Println(dndsRes)
-	// 					locDNDS[dndsRes[0]] = append(locDNDS[dndsRes[0]], dndsRes[1])
-	// 					if dndsRes[1] == "1" {
-	// 						countNbrOne[allloc]++
-	// 					}
-	// 					close(dndsChan)
-	// 				}
+// 	// 					dndsChan <- getDnDsByLocus(allloc, altPositions[allloc])
+// 	// 				}()
+// 	// 				dndsRes, ok := <-dndsChan
+// 	// 				if ok {
+// 	// 					// fmt.Println(dndsRes)
+// 	// 					locDNDS[dndsRes[0]] = append(locDNDS[dndsRes[0]], dndsRes[1])
+// 	// 					if dndsRes[1] == "1" {
+// 	// 						countNbrOne[allloc]++
+// 	// 					}
+// 	// 					close(dndsChan)
+// 	// 				}
 
-	// 			} else {
+// 	// 			} else {
 
-	// 				locDNDS[allloc] = append(locDNDS[allloc], "1")
-	// 				countNbrOne[allloc]++
-	// 			}
+// 	// 				locDNDS[allloc] = append(locDNDS[allloc], "1")
+// 	// 				countNbrOne[allloc]++
+// 	// 			}
 
-	// 		}
-	// 		fmt.Printf("Calculating Dn/DS: Working on %v from %v (%v) \t\t E.t:%v\n", i, len(*files), fname, t1.Sub(t0))
+// 	// 		}
+// 	// 		fmt.Printf("Calculating Dn/DS: Working on %v from %v (%v) \t\t E.t:%v\n", i, len(*files), fname, t1.Sub(t0))
 
-	// 	}
+// 	// 	}
 
-	// 	for _, allloc := range allLocuses {
+// 	// 	for _, allloc := range allLocuses {
 
-	// 		if countNbrOne[allloc] != len(*files) && *statAll == false {
-	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
-	// 		} else if *statAll == true {
-	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
-	// 		}
+// 	// 		if countNbrOne[allloc] != len(*files) && *statAll == false {
+// 	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
+// 	// 		} else if *statAll == true {
+// 	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v(%v)\t", allloc, getProductByName(allloc)), strings.Join(locDNDS[allloc], "\t")))
+// 	// 		}
 
-	// 	}
-	// 	// }
+// 	// 	}
+// 	// 	// }
 
-	// 	headers.WriteString("\n")
+// 	// 	headers.WriteString("\n")
 
-	case "jw":
-		// var dnds [][]DnDsRes
-		var (
-			locJW = map[string][]string{}
-			i     int
-		)
-		headers.WriteString("Locus\t")
+// 	case "mst":
+// 		var (
+// 			exGenes = make(map[int]int)
+// 			exSNP   = make(map[int]int)
+// 		)
 
-		// for i, file := range files {
-		for fname := range snpCacheMap {
-			i++
-			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 		exGenes = loadExcludeGenes(*gbExcludeGenes)
+// 		exSNP = loadExcludeSNP(*gbExcludeSnp)
 
-			fmt.Printf("Calculating Jaro Winkler distance: Working on %v from %v (%v) \r", i, len(*files), fname)
+// 		matrixBinaryMST(fileOut, false, exGenes, exSNP)
+// 	case "jw":
+// 		// var dnds [][]DnDsRes
+// 		var (
+// 			locJW = map[string][]string{}
+// 			i     int
+// 		)
+// 		headers.WriteString("Locus\t")
 
-			jw := calcJaroWinklerDist(fname, *gbVerbose)
+// 		// for i, file := range files {
+// 		for fname := range snpCacheMap {
+// 			i++
+// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-			for _, jwVal := range jw {
+// 			fmt.Printf("Calculating Jaro Winkler distance: Working on %v from %v (%v) \r", i, len(*files), fname)
 
-				locJW[jwVal.Locus] = append(locJW[jwVal.Locus], fmt.Sprintf("%.3f", jwVal.JWDist))
+// 			jw := calcJaroWinklerDist(fname, *gbVerbose)
 
-			}
+// 			for _, jwVal := range jw {
 
-		}
+// 				locJW[jwVal.Locus] = append(locJW[jwVal.Locus], fmt.Sprintf("%.3f", jwVal.JWDist))
 
-		// for _, allloc := range allLocuses {
+// 			}
 
-		// 	if len(locJW[allloc]) != 0 {
-		// 		for i, res := range locJW[allloc] {
-		// 			fmt.Println(i, res)
-		// 		}
-		// 	}
-		// }
+// 		}
 
-		for _, allloc := range allLocuses {
+// 		// for _, allloc := range allLocuses {
 
-			if len(locJW[allloc]) != 0 {
+// 		// 	if len(locJW[allloc]) != 0 {
+// 		// 		for i, res := range locJW[allloc] {
+// 		// 			fmt.Println(i, res)
+// 		// 		}
+// 		// 	}
+// 		// }
 
-				// fmt.Println(len(*files)-len(locJW[allloc]), locJW[allloc], strings.Repeat(" 1 ", len(*files)-len(locJW[allloc])))
-				rpt := strings.Repeat("1\t", len(*files)-len(locJW[allloc]))
-				locJW[allloc] = append(locJW[allloc], rpt)
-				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t", allloc), strings.Join(locJW[allloc], "\t")))
+// 		for _, allloc := range allLocuses {
 
-			}
-		}
+// 			if len(locJW[allloc]) != 0 {
 
-		headers.WriteString("\n")
+// 				// fmt.Println(len(*files)-len(locJW[allloc]), locJW[allloc], strings.Repeat(" 1 ", len(*files)-len(locJW[allloc])))
+// 				rpt := strings.Repeat("1\t", len(*files)-len(locJW[allloc]))
+// 				locJW[allloc] = append(locJW[allloc], rpt)
+// 				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t", allloc), strings.Join(locJW[allloc], "\t")))
 
-	case "gc3":
-		// calcGC3Val
-		var (
-			locGC3 = map[string][]string{}
-			refGC3 = map[string]string{}
-			i      int
-		)
-		headers.WriteString("Locus\tRefCG3\t")
+// 			}
+// 		}
 
-		// for i, file := range files {
-		for fname := range snpCacheMap {
-			// fmt.Println(fname)
-			i++
-			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+// 		headers.WriteString("\n")
 
-			fmt.Printf("Calculating GC3 values: Working on %v from %v\t%v \r", i, len(*files), fname)
-			// logger.Printf("%v\n", fname)
-			// fmt.Println(snpCacheMap[fname])
-			gc3 := calcGC3Val(snpCacheMap[fname])
-			// logger.Printf("%v\t%v\n", fname, gc3)
-			// fmt.Println(gc3)
-			// fmt.Println(gc3)
-			for _, gc3val := range gc3 {
+// 	case "gc3":
+// 		// calcGC3Val
+// 		var (
+// 			locGC3 = map[string][]string{}
+// 			refGC3 = map[string]string{}
+// 			i      int
+// 		)
+// 		headers.WriteString("Locus\tRefCG3\t")
 
-				locGC3[gc3val.Locus] = append(locGC3[gc3val.Locus], fmt.Sprintf("%.2f", gc3val.GC3Alt))
-				refGC3[gc3val.Locus] = fmt.Sprintf("%.2f", gc3val.GC3Ref)
-				// if *flgDebug == true {
-				// 	fmt.Printf("L:%v Alt:%v Ref:%v\n", gc3val.Locus, gc3val.GC3Alt, gc3val.GC3Ref)
-				// }
+// 		// for i, file := range files {
+// 		for fname := range snpCacheMap {
+// 			// fmt.Println(fname)
+// 			i++
+// 			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
 
-			}
+// 			fmt.Printf("Calculating GC3 values: Working on %v from %v\t%v \r", i, len(*files), fname)
+// 			// logger.Printf("%v\n", fname)
+// 			// fmt.Println(snpCacheMap[fname])
+// 			gc3 := calcGC3Val(snpCacheMap[fname])
+// 			// logger.Printf("%v\t%v\n", fname, gc3)
+// 			// fmt.Println(gc3)
+// 			// fmt.Println(gc3)
+// 			for _, gc3val := range gc3 {
 
-		}
+// 				locGC3[gc3val.Locus] = append(locGC3[gc3val.Locus], fmt.Sprintf("%.2f", gc3val.GC3Alt))
+// 				refGC3[gc3val.Locus] = fmt.Sprintf("%.2f", gc3val.GC3Ref)
+// 				// if *flgDebug == true {
+// 				// 	fmt.Printf("L:%v Alt:%v Ref:%v\n", gc3val.Locus, gc3val.GC3Alt, gc3val.GC3Ref)
+// 				// }
 
-		for _, allloc := range allLocuses {
-			// if len(locGC3[allloc]) != 0 {
-			if len(locGC3[allloc]) != 0 {
-				rpt := strings.Repeat(refGC3[allloc]+"\t", len(*files)-len(locGC3[allloc]))
-				locGC3[allloc] = append(locGC3[allloc], rpt)
-				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t%v\t", allloc, refGC3[allloc]), strings.Join(locGC3[allloc], "\t")))
+// 			}
 
-			}
-		}
+// 		}
 
-		headers.WriteString("\n")
+// 		for _, allloc := range allLocuses {
+// 			// if len(locGC3[allloc]) != 0 {
+// 			if len(locGC3[allloc]) != 0 {
+// 				rpt := strings.Repeat(refGC3[allloc]+"\t", len(*files)-len(locGC3[allloc]))
+// 				locGC3[allloc] = append(locGC3[allloc], rpt)
+// 				buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t%v\t", allloc, refGC3[allloc]), strings.Join(locGC3[allloc], "\t")))
 
-	}
+// 			}
+// 		}
 
-	// case "gc":
-	// 	// calcGC3Val
-	// 	var locGC = map[string][]string{}
-	// 	var refGC = map[string]string{}
+// 		headers.WriteString("\n")
 
-	// 	headers.WriteString("Locus\tRefCG\t")
+// 	}
 
-	// 	for i, file := range files {
+// 	// case "gc":
+// 	// 	// calcGC3Val
+// 	// 	var locGC = map[string][]string{}
+// 	// 	var refGC = map[string]string{}
 
-	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+// 	// 	headers.WriteString("Locus\tRefCG\t")
 
-	// 		fmt.Printf("Calculating GC values: Working on %v from %v \r", i+1, len(files))
+// 	// 	for i, file := range files {
 
-	// 		gc := calcGC3Val(file)
+// 	// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
 
-	// 		for _, gcval := range gc {
+// 	// 		fmt.Printf("Calculating GC values: Working on %v from %v \r", i+1, len(files))
 
-	// 			locGC[gcval.Locus] = append(locGC[gcval.Locus], fmt.Sprintf("%.2f", gcval.GCalt))
-	// 			refGC[gcval.Locus] = fmt.Sprintf("%.2f", gcval.GCref)
+// 	// 		gc := calcGC3Val(file)
 
-	// 		}
+// 	// 		for _, gcval := range gc {
 
-	// 	}
+// 	// 			locGC[gcval.Locus] = append(locGC[gcval.Locus], fmt.Sprintf("%.2f", gcval.GCalt))
+// 	// 			refGC[gcval.Locus] = fmt.Sprintf("%.2f", gcval.GCref)
 
-	// 	for _, allloc := range allLocuses {
+// 	// 		}
 
-	// 		if len(locGC[allloc]) != 0 {
-	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t%v\t", allloc, refGC[allloc]), strings.Join(locGC[allloc], "\t")))
+// 	// 	}
 
-	// 		}
-	// 	}
+// 	// 	for _, allloc := range allLocuses {
 
-	// 	headers.WriteString("\n")
+// 	// 		if len(locGC[allloc]) != 0 {
+// 	// 			buffer.WriteString(fmt.Sprintln(fmt.Sprintf("%v\t%v\t", allloc, refGC[allloc]), strings.Join(locGC[allloc], "\t")))
 
-	// }
+// 	// 		}
+// 	// 	}
 
-	// if buffer.Len() != 0 && headers.Len() != 0 {
-	// 	fOut, err := os.Create(fileOut)
-	// 	if err != nil {
-	// 		log.Fatal("Cannot create file", err)
-	// 	}
-	// 	defer fOut.Close()
-	// 	fmt.Fprintf(fOut, headers.String())
-	// 	fmt.Fprintf(fOut, buffer.String())
-	// 	fmt.Printf("\n\nWell done!\n")
-	// 	// t1 := time.Now()
-	// 	// fmt.Printf("Elapsed time: %v", fmtDuration(t1.Sub(t0)))
-	// }
+// 	// 	headers.WriteString("\n")
 
-}
+// 	// }
+
+// 	// if buffer.Len() != 0 && headers.Len() != 0 {
+// 	// 	fOut, err := os.Create(fileOut)
+// 	// 	if err != nil {
+// 	// 		log.Fatal("Cannot create file", err)
+// 	// 	}
+// 	// 	defer fOut.Close()
+// 	// 	fmt.Fprintf(fOut, headers.String())
+// 	// 	fmt.Fprintf(fOut, buffer.String())
+// 	// 	fmt.Printf("\n\nWell done!\n")
+// 	// 	// t1 := time.Now()
+// 	// 	// fmt.Printf("Elapsed time: %v", fmtDuration(t1.Sub(t0)))
+// 	// }
+
+// }
 
 func makeMatrix(typeof string, fileOut string, verbose bool) {
 
@@ -3441,6 +3673,133 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 		// t1 := time.Now()
 		// fmt.Printf("Elapsed time: %v", fmtDuration(t1.Sub(t0)))
 		// }
+	case "summary":
+		var (
+			posFreq                = map[int][]string{}
+			pos                    = make(map[int]string)
+			groupRegexp            = regexp.MustCompile(`^(\S+)\W+(\w+)\W+(\w+)`)
+			group                  = make(map[string]string)
+			label                  = make(map[string]string)
+			groupHeader, groupBody string
+			fileGroup              = make(map[int][]string)
+			fileLabel              = make(map[int][]string)
+		)
+
+		if *statGroupFromFile != "" {
+			f, err := os.Open(*statGroupFromFile) // открываем файл
+
+			if err != nil {
+				fmt.Println(err)
+
+			}
+			defer f.Close()
+
+			scanner := bufio.NewScanner(f) //  новый сканер
+
+			for scanner.Scan() {
+
+				scanTxt := scanner.Text()
+
+				for _, grpVal := range groupRegexp.FindAllStringSubmatch(scanTxt, -1) {
+					group[grpVal[1]] = grpVal[2]
+					label[grpVal[1]] = grpVal[3]
+
+					// fmt.Println(grpVal)
+				}
+			}
+
+		}
+		// fmt.Println(group)
+		if len(group) != 0 {
+			groupHeader = "Group\t"
+			if len(label) != 0 {
+				groupHeader = fmt.Sprintf("%vLabel\t", groupHeader)
+			}
+		}
+
+		headers.WriteString(fmt.Sprintf("Pos\tLocus\t%v", groupHeader))
+		// allPosChan := make(chan []int)
+		// go func() {
+		// 	allPosChan <- getAllPosFromCacheMap()
+		// }()
+		// AllPos = <-allPosChan
+		// for i, file := range files {
+		AllPos = getAllPosFromCacheMap()
+		for fname, snps := range snpCacheMap {
+
+			// fmt.Printf("Generating matrix: Working on  %v from %v \r", i+1, len(files))
+
+			headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(fname, filepath.Ext(fname))))
+
+			// snps := parserVCF(file, false, allGenesVal)
+
+			for _, val := range snps {
+
+				pos[val.APos] = val.Alt
+				// AllPosUnsort = append(AllPosUnsort, val.APos)
+
+			}
+			for _, allpos := range AllPos {
+
+				if pos[allpos] != "" {
+					posFreq[allpos] = append(posFreq[allpos], fmt.Sprintf("%v/%v", getNucFromGenomePos(allpos), pos[allpos]))
+					// fmt.Println(posFreq[allpos])
+					if len(group) != 0 {
+						fileGroup[allpos] = append(fileGroup[allpos], group[fname])
+						if len(label) != 0 {
+							fileLabel[allpos] = append(fileLabel[allpos], label[fname])
+						}
+						// groupArr = append(groupArr, group[fname])
+						// groupBody = fmt.Sprintf("\t%v\t", group[fname])
+					} else {
+						groupBody = "\t"
+					}
+
+				} else {
+					posFreq[allpos] = append(posFreq[allpos], ".")
+
+				}
+
+			}
+
+		}
+		// AllPos = unique(AllPosUnsort)
+		// // allLocuses = removeStringDuplicates(allLocusUnsort)
+		// sort.Ints(AllPos)
+
+		for _, allpos := range AllPos {
+			// if buffer.Len() == 0 {
+			gname, _ := getGeneNameByPos(allpos, allpos)
+			if len(group) != 0 {
+				sort.Strings(fileGroup[allpos])
+				uniq := removeStringDuplicates(fileGroup[allpos])
+				groupBody = fmt.Sprintf("\t%v\t", strings.Join(uniq, ""))
+				// fmt.Println(groupBody)
+			}
+			if len(label) != 0 {
+				sort.Strings(fileLabel[allpos])
+				uniq := removeStringDuplicates(fileLabel[allpos])
+				groupBody = fmt.Sprintf("%v%v\t", groupBody, strings.Join(uniq, " "))
+			}
+
+			buffer.WriteString(fmt.Sprintln(allpos, "\t", gname, groupBody, strings.Join(posFreq[allpos], "\t")))
+			// fmt.Println(buffer.String())
+
+		}
+		headers.WriteString("\n")
+		matrixPrint(headers, buffer, fileOut)
+		// if buffer.Len() != 0 && headers.Len() != 0 {
+		// 	fOut, err := os.Create(fileOut)
+		// 	if err != nil {
+		// 		log.Fatal("Cannot create file", err)
+		// 	}
+		// 	defer fOut.Close()
+		// 	fmt.Fprintf(fOut, headers.String())
+		// 	fmt.Fprintf(fOut, buffer.String())
+		// 	fmt.Printf("\n\nWell done!\n")
+		// t1 := time.Now()
+		// fmt.Printf("Elapsed time: %v", fmtDuration(t1.Sub(t0)))
+		// }
 
 	case "locus":
 		var (
@@ -3504,6 +3863,19 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 
 	case "dnds":
 		matrixDnDs(fileOut)
+	case "mst":
+		//stat --db test_core -a matrix -t mst -o test.tsv --exclude-genes=exgenes.txt --exclude-snp=drugs2.txt --snp-number=15
+		var (
+			exGenes = make(map[int]int)
+			exSNP   = make(map[int]int)
+		)
+		if *gbExcludeGenes != "" {
+			exGenes = loadExcludeGenes(*gbExcludeGenes)
+		} else if *gbExcludeSnp != "" {
+			exSNP = loadExcludeSNP(*gbExcludeSnp)
+		}
+
+		matrixBinaryMST(fileOut, *gbVerbose, exGenes, exSNP, *statNonRandomize)
 
 	case "jw":
 		// var dnds [][]DnDsRes
@@ -4073,6 +4445,180 @@ func matrixBinary(fileOut string) {
 
 }
 
+func matrixBinaryMST(fileOut string, verbose bool, exGenes map[int]int, exSNPs map[int]int, nonrandomize bool) {
+
+	var (
+		AllPos, SelectedPos []int
+		// ResSeq              []seqInfo
+		// passSNP = make(map[string]int)
+		uniqSNP         = make(map[int]int)
+		nbrOfSNP        = 50
+		headers, buffer strings.Builder
+		snpCount        = make(map[int]int)
+		// posCount             = make(map[int]int)
+	)
+	// files := getListofVCF()
+
+	// queryChan := make(chan vcfInfoQuery)
+
+	if *statNbrOfNSP != 0 {
+		nbrOfSNP = *statNbrOfNSP
+	}
+
+	files := &listOfFiles
+	for i, file := range *files {
+		// создаем запрос в виде типа vcfQuery, который передается через канал на выход <-qSNP.OutChan
+		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery), Print: verbose}
+		go qSNP.request()
+		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
+		snpRes := <-qSNP.OutChan
+		snpCacheMap[snpRes.File] = snpRes.SnpInfo
+		if verbose == true {
+			fmt.Printf("Reading files:  %v from %v \r", i+1, len(*files))
+		}
+
+	}
+
+	for _, snps := range snpCacheMap {
+
+		for _, val := range snps {
+			if len(exGenes) != 0 {
+
+				for key, value := range exGenes {
+					if val.APos >= key && val.APos <= value {
+						// fmt.Println(val.Locus, val.Start, val.End, val.Product)
+						// passSNP["genes"] = passSNP["genes"] + 1
+						uniqSNP[val.APos] = 2 //2-EXCLUDED
+						continue
+					} else if exSNPs[val.APos] == 1 {
+						// passSNP["snp"] = passSNP["snp"] + 1
+						uniqSNP[val.APos] = 2 //2-EXCLUDED
+						continue
+
+						// fmt.Println(val.APos)
+
+					} else {
+						if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 {
+							uniqSNP[val.APos] = 1 //1-INCLUDED
+
+						}
+					}
+				}
+			} else {
+				if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 {
+					uniqSNP[val.APos] = 1
+
+				}
+				// AllPosUnsort = append(AllPosUnsort, val.APos)
+			}
+			snpCount[val.APos] = snpCount[val.APos] + 1
+			// if exGenes[val.Locus] != 1 && exSNPs[string(val.APos)] != 1 {
+			// 	AllPosUnsort = append(AllPosUnsort, val.APos)
+			// }
+		}
+	}
+
+	// fmt.Println(uniqSNP)
+
+	for key, value := range uniqSNP {
+
+		if value == 1 && len(*files) != snpCount[key] {
+
+			AllPos = append(AllPos, key)
+			// } else if value == 2 {
+			// 	fmt.Println(key)
+
+		}
+
+	}
+	// go process("Working...          ")
+	// AllPos = unique(AllPosUnsort)
+
+	sort.Ints(AllPos)
+
+	rand.Seed(time.Now().UnixNano())
+
+	if nbrOfSNP > len(AllPos) {
+		nbrOfSNP = len(AllPos) - 1
+	}
+
+	if nonrandomize == false {
+		for i := 1; i <= nbrOfSNP; i++ {
+			rnd := rand.Intn(len(AllPos)-i) + i
+			// fmt.Println(AllPos[rnd])
+			SelectedPos = append(SelectedPos, AllPos[rnd])
+		}
+	} else {
+		for i := 0; i <= nbrOfSNP; i++ {
+			// rnd := rand.Intn(len(AllPos)-i) + i
+			// fmt.Println(AllPos[rnd])
+			SelectedPos = append(SelectedPos, AllPos[i])
+		}
+	}
+	// fmt.Println(AllPos[0])
+
+	// rand.Intn(max - min) + min
+
+	sort.Ints(SelectedPos)
+
+	// for i := 0; i < len(SelectedPos); i++ {
+	// 	headers.WriteString(fmt.Sprintln(SelectedPos[i], "\t"))
+	// }
+	// headers.WriteString(fmt.Sprintf("%v\n", strings.Join(SelectedPos, "\t")))
+	headers.WriteString("\t")
+	// buffer.WriteString("\t")
+	headers.WriteString(strings.Trim(strings.Join(strings.Fields(fmt.Sprint(SelectedPos)), "\t"), "[]"))
+	headers.WriteString("\n")
+	if verbose == true {
+		fmt.Println(headers.String())
+		// fmt.Println(AllPos)
+	}
+	for fname, snps := range snpCacheMap {
+		buffer.WriteString(fname)
+		// if verbose == true {
+		// 	fmt.Printf("Generating sequences: Working on  %v from %v \r", i+1, len(snps.File))
+		// }
+		pos := make(map[int]string)
+		// var buffer strings.Builder
+
+		// buffer.WriteString(fmt.Sprintf(">%v\n", strings.ToUpper(fname)))
+
+		for _, val := range snps {
+			pos[val.APos] = val.Alt
+			// if exGenes[val.Locus] == 1 {
+			// 	fmt.Println(val.Locus)
+			// }
+
+		}
+		for _, allpos := range SelectedPos {
+			// posCount[allpos] = posCount[allpos] + 1
+			// fmt.Println(snpCount[allpos])
+
+			if pos[allpos] != "" {
+
+				buffer.WriteString("\t1")
+			} else {
+
+				buffer.WriteString("\t0")
+			}
+			// }
+
+		}
+		buffer.WriteString("\n")
+		// ResSeq = append(ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: SelectedPos})
+		// fmt.Println(len(buffer.String()))
+
+		// if *gbDebug == true {
+		// 	fmt.Printf("%v\t:\nThere was passed %v SNPs from exclude gene file\n And %v SNPs from exclude snp file\n", fname, passSNP["genes"], passSNP["snp"])
+		// }
+	}
+	if verbose == true {
+		fmt.Println(buffer.String())
+	}
+	matrixPrint(headers, buffer, fileOut)
+	// return ResSeq
+}
+
 func matrixBinaryOld(fileOut string) {
 	var (
 		AllPosUnsort, AllPos []int
@@ -4385,9 +4931,39 @@ func getHashSNP(snp snpInfo) uint64 {
 // }
 
 func toBED() {
-	for _, g := range allGenesVal {
-		fmt.Printf("%v\t%v\t%v\t%v\n", gInfo.Version, g.Start, g.End, g.Locus)
+	var (
+		genomeName string
+	)
+
+	if *statCircosGenome != "" {
+		genomeName = *statCircosGenome
+	} else {
+		genomeName = gInfo.Version
+
 	}
+
+	for _, g := range allGenesVal {
+		switch *statCircosTypeOf {
+		case "":
+			if *statShowAnnotation == true {
+				fmt.Printf("%v\t%v\t%v\t%v\t%v\n", genomeName, g.Start, g.End, g.Locus, g.Product)
+			} else if *statShowAnnotation == false {
+				fmt.Printf("%v\t%v\t%v\t%v\n", genomeName, g.Start, g.End, g.Locus)
+			}
+		case "CDS":
+			if g.TypeOf == "CDS" && *statShowAnnotation == true {
+				fmt.Printf("%v\t%v\t%v\t%v\t%v\n", genomeName, g.Start, g.End, g.Locus, g.Product)
+			} else if g.TypeOf == "CDS" && *statShowAnnotation == false {
+				fmt.Printf("%v\t%v\t%v\t%v\n", genomeName, g.Start, g.End, g.Locus)
+			}
+		case "IGR":
+			if g.TypeOf == "IGR" {
+				fmt.Printf("%v\t%v\t%v\t%v\n", genomeName, g.Start, g.End, g.Locus)
+			}
+		}
+
+	}
+
 }
 
 func getCoordRange(start, end int) {
@@ -4638,6 +5214,12 @@ func makeSeqFromSNPListFile(f string) {
 				snpCheckChan <- checkSNPnotation(scanner.Text())
 			}()
 			snpCheck := <-snpCheckChan
+			if snpCheck.Locus == "" {
+				aposInt, _ := strconv.Atoi(snpCheck.APos)
+				locName, _ := getGeneNameByPos(aposInt, aposInt)
+				snpCheck.Locus = locName
+			}
+			// fmt.Println(snpCheck)
 			if snpCheck.Locus != "" {
 				// start, end := getGenePosByName(snpCheck.Locus)
 				// parsedSNP = append(parsedSNP, snpCheck)
@@ -4645,6 +5227,7 @@ func makeSeqFromSNPListFile(f string) {
 				// if start != 0 && end != 0 {
 
 				dir := getDirectionByName(snpCheck.Locus)
+
 				// if dir == "f" {
 				// // 	seq = getNucFromGenome(start-1, end)
 				// } else if dir == "r" {
@@ -4774,4 +5357,73 @@ func getGeneSequence(locus string) string {
 		fmt.Println("Locus not found [getGeneSequence func]")
 	}
 	return seq
+}
+
+func loadExcludeGenes(file string) map[int]int {
+	var (
+		exGenes       = make(map[int]int)
+		exLocusCoords = regexp.MustCompile(`^\w+\W+(\d+)\W+(\d+)`)
+		start, end    int
+	)
+
+	f, err := os.Open(file) // открываем файл
+
+	if err != nil {
+		fmt.Println(err)
+
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f) //  новый сканер
+
+	for scanner.Scan() {
+
+		scanTxt := scanner.Text()
+
+		for _, exGene := range exLocusCoords.FindAllStringSubmatch(scanTxt, -1) {
+			start, _ = strconv.Atoi(exGene[1])
+			end, _ = strconv.Atoi(exGene[2])
+
+			// fmt.Println(exGene)
+			// exGenes[exGene[0]] = 1
+			exGenes[start] = end
+
+		}
+	}
+	return exGenes
+}
+
+func loadExcludeSNP(file string) map[int]int {
+
+	var (
+		exSNPs = make(map[int]int)
+		snpPos int
+	)
+
+	locSNPcheck := readSNPFromFile(file)
+	for _, val := range locSNPcheck {
+		snpPos, _ = strconv.Atoi(val.APos)
+		exSNPs[snpPos] = 1
+	}
+	// fmt.Println(exSNPs)
+	return exSNPs
+}
+
+func openbrowser(url string) {
+	var err error
+
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
