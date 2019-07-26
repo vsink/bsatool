@@ -2630,7 +2630,7 @@ word-wrap: break-word; /* Перенос слов */
 
 	// }
 	// resp.Body.Close()
-	// browser.OpenURL(fmt.Sprintf("localhost:%v", port))
+	browser.OpenURL(fmt.Sprintf("localhost:%v/", port))
 
 	locPort := fmt.Sprintf(":%v", port)
 
