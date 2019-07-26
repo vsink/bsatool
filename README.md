@@ -1,1 +1,1 @@
-# Bacterial Snp Annotation TOOL (BSATOOL)
+# Bacterial Snp Annotation Tool (BSATOOL)
