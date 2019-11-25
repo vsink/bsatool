@@ -7352,12 +7352,12 @@ func checkPosList(file string) {
 func checkPosListVCF(fileUniq string, makeSeq bool) {
 
 	var (
-		posCounter                                                                       = make(map[int]int)
-		foundPos                                                                         = make(map[int]snpInfo)
-		posInGene                                                                        int
-		refNuc, altNuc, seq, locus, locusDescr, posfromfile, leftFlankSeq, rightFlankSeq string
-		seqArr                                                                           []string
-		posFromFile                                                                      = regexp.MustCompile(`(\d+)`)
+		posCounter                                                                                                        = make(map[int]int)
+		foundPos                                                                                                          = make(map[int]snpInfo)
+		posInGene                                                                                                         int
+		refNuc, altNuc, seq, locus, locusDescr, posfromfile, leftFlankSeq, rightFlankSeq, leftFlankDescr, rightFlankDescr string
+		seqArr                                                                                                            []string
+		posFromFile                                                                                                       = regexp.MustCompile(`(\d+)`)
 	)
 
 	files := &listOfFiles
@@ -7431,10 +7431,12 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 					if *statFlankLeft != 0 {
 						leftPos := start - *statFlankLeft
 						leftFlankSeq = getNucFromGenome(leftPos, end)
+						leftFlankDescr = fmt.Sprintf("+left=%v", *statFlankLeft)
 					}
 					if *statFlankRight != 0 {
 						rightPos := end + *statFlankLeft
 						rightFlankSeq = getNucFromGenome(start, rightPos)
+						rightFlankDescr = fmt.Sprintf("+right=%v", *statFlankRight)
 					}
 					refNuc = foundPos[key].NucInPos
 					posInGene = (key - start) + 1
@@ -7443,23 +7445,26 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 					seq = getNucFromGenome(start, end)
 					seqArr = strings.Split(seq, "")
 					seqArr[posInGene-1] = fmt.Sprintf("\n[%v/%v]\n", refNuc, altNuc)
-					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v]", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)))
+					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v, %v %v] ", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)), leftFlankDescr, rightFlankDescr)
 				} else if direction == "r" {
 					if *statFlankLeft != 0 {
 						rightPos := end + *statFlankLeft
 						rightFlankSeq = getReverseComplement(getNucFromGenome(end, rightPos))
+						leftFlankDescr = fmt.Sprintf("+c_left=%v", *statFlankLeft)
 					}
 					if *statFlankRight != 0 {
 						leftPos := start - *statFlankLeft
 						leftFlankSeq = getReverseComplement(getNucFromGenome(leftPos, start))
+						rightFlankDescr = fmt.Sprintf("+c_right=%v", *statFlankRight)
 					}
 					refNuc = foundPos[key].NucInPos
 					altNuc = foundPos[key].Alt
 					posInGene = (end - key) + 1
 					seq = getReverseComplement(getNucFromGenome(start, end))
 					seqArr = strings.Split(seq, "")
+
 					seqArr[posInGene-1] = fmt.Sprintf("\n[%v/%v]\n", refNuc, altNuc)
-					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v]", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)))
+					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v, %v %v ] ", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)), leftFlankDescr, rightFlankDescr)
 				}
 				// posInGene := posInGeneFromEnd + posInGeneFromStart
 				// seqArr[posInGene+1] = fmt.Sprintf("[%v|%v]", seqArr[posInGene+1], refNuc)
