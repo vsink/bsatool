@@ -154,6 +154,9 @@ var (
 	statGName           = statAction.Flag("gname", "set strain name").String()
 	statFlankLeft       = statAction.Flag("flank_left", "number of left nuclotides").Int()
 	statFlankRight      = statAction.Flag("flank_right", "number of right nuclotides").Int()
+	statAsTable         = statAction.Flag("table", "show results of check info as table").Bool()
+	statReverse         = statAction.Flag("reverse", "make seq for complementnary genes in gene direction").Bool()
+	statAsBinary        = statAction.Flag("binary", "show results of check info as binary sequence").Bool()
 	// statMkSeq   = statAction.Flag("mkseq", "").Bool()
 	// statTH      = statAction.Flag("th", "").Int()
 
@@ -603,6 +606,7 @@ func main() {
 		// 	}
 		case "check":
 			// go run bsatool.go stat -a check --db test_core -i drugs2.txt -r rule.txt -w
+			// go run bsatool.go  stat -b test_core -a check -i drugs2.txt --table
 
 			if *statMakeSeq == true {
 				makeSeqFromSNPListFile(*statInFile)
@@ -655,6 +659,7 @@ func main() {
 				if *statVCF == "list" {
 					//
 					// go run bsatool.go  stat -b test_core -a check_pos -i uniq  --vcf=list --mkseq
+					// go run bsatool.go  stat -b test_core -a check_pos -i uniq  --vcf=list --mkseq --reverse
 
 					checkPosListVCF(*statInFile, *statMakeSeq)
 				} else {
@@ -964,10 +969,15 @@ func getSnpInfo(apos int, g geneInfo, alt string, flgTang bool) snpInfo {
 	nucG := getNucFromGenomePos((posInGene + lStart) - 1)
 	typeOf = g.TypeOf
 
+	// if apos == 2288836 {
+	// 	fmt.Println(codon+"!!!", "genome:", nucG, "/", alt, codon, posInCodonG+1)
+	// }
 	if g.Direction == "r" {
+
 		alt = getComplement(alt)
 		nucG = getComplement(nucG)
-		codon = getComplement(codon)
+
+		codon = getReverseComplement(codon)
 		posInGene = CPosInGene
 		codonNbrInG = CCodonNbrInG
 
@@ -981,12 +991,23 @@ func getSnpInfo(apos int, g geneInfo, alt string, flgTang bool) snpInfo {
 	//
 
 	codonPositions = strings.Split(codon, "")
+
+	// if apos == 2288836 {
+	// 	fmt.Println(strings.Join(codonPositions, ""), "!!!")
+	// }
+
 	codonPositions[posInCodonG] = strings.ToUpper(codonPositions[posInCodonG])
+
 	codon = strings.Join(codonPositions, "")
+
 	altCodonPositions = codonPositions
+
 	altCodonPositions[posInCodonG] = alt
+
 	altCodonPositions[posInCodonG] = strings.ToUpper(altCodonPositions[posInCodonG])
+
 	altCodon = strings.Join(altCodonPositions, "")
+
 	aaRef, aaRefShort := amino.Codon2AA(codon)
 	aaAlt, aaAltShort := amino.Codon2AA(altCodon)
 	if aaRefShort == aaAltShort {
@@ -1014,7 +1035,9 @@ func getSnpInfo(apos int, g geneInfo, alt string, flgTang bool) snpInfo {
 	// amino.GetTangInx(aaRefShort, aaAltShort)
 	titv = checkTiTv(nucG, alt)
 	// fmt.Println(lStart, lEnd, g.Direction, geneLen, g.Locus, g.Product)
-
+	// if apos == 2288836 {
+	// 	fmt.Println(codon+"!!!", "reverse:", nucG, "/", alt, codon, posInCodonG+1, codon, altCodon, altCodonArr)
+	// }
 	snp = snpInfo{APos: apos, PosInGene: posInGene, PosInCodonG: posInCodonG,
 		RefCodon: codon, RefAA: aaRef, NucInPos: strings.ToUpper(nucG), Locus: g.Locus,
 		Direction: g.Direction, Name: g.Name, Product: g.Product,
@@ -2936,7 +2959,13 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 
 	locSNPcheck := readSNPFromFile(f)
 	isNotFound := make(map[string]int)
-	var chkSNP []checkSNP
+
+	snpFound := make(map[string]map[string]int)
+
+	var (
+		chkSNP        []checkSNP
+		mutationsLits []string
+	)
 
 	// var buffer strings.Builder
 	// bar := pb.ProgressBarTemplate(pbtmpl).Start(len(files))
@@ -2950,6 +2979,8 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 		// bar.Increment()
 		// i++
 		// fmt.Printf("processed %v files\r", i)
+		snpFound[file] = make(map[string]int)
+
 		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery)}
 		go qSNP.request()
 		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
@@ -2993,6 +3024,8 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v%v>%v]", val.Name, val.Locus, val.PosInGene, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
 						// buffer.WriteString(fmt.Sprintf("%v_%v:%v%v>%v\t", val.Name, val.Locus, val.PosInGene, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
 						//  fmt.Println(strings.ToUpper(buffer.String()))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1
 					}
 				case tPMLN:
 
@@ -3001,6 +3034,8 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 						// chkSNP = checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))}
 						// snpArr = append(snpArr, checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))})
 						// buffer.WriteString(fmt.Sprintf("%v_%v:%v_%v>%v\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1
 					}
 				case tLSAAN:
 
@@ -3008,21 +3043,25 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 
 						val.AASalt == snpFromFile.AltAAShort {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v%v%v]", val.Name, val.Locus, val.AASref, CodonNbrInG, val.AASalt))
-						// buffer.WriteString(fmt.Sprintf("%v_%v:%v%v%v\t", val.Name, val.Locus, val.AASref, CodonNbrInG, val.AASalt))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1 // buffer.WriteString(fmt.Sprintf("%v_%v:%v%v%v\t", val.Name, val.Locus, val.AASref, CodonNbrInG, val.AASalt))
+
 					}
 				case tLLAAN:
 
 					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == snpFromFile.CodonNbrInG &&
 						val.AALalt == snpFromFile.AltAA {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v%v%v]", val.Name, val.Locus, val.AALref, CodonNbrInG, val.AALalt))
-						// buffer.WriteString(fmt.Sprintf("%v_%v:%v%v%v\t", val.Name, val.Locus, val.AALref, CodonNbrInG, val.AALalt))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1 // buffer.WriteString(fmt.Sprintf("%v_%v:%v%v%v\t", val.Name, val.Locus, val.AALref, CodonNbrInG, val.AALalt))
 
 					}
 				case tLCN:
 
 					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == snpFromFile.CodonNbrInG {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:codon%v]", val.Name, val.Locus, CodonNbrInG))
-						// buffer.WriteString(fmt.Sprintf("%v_%v:codon%v\t", val.Name, val.Locus, CodonNbrInG))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1 // buffer.WriteString(fmt.Sprintf("%v_%v:codon%v\t", val.Name, val.Locus, CodonNbrInG))
 					}
 				case tPMN:
 					// fmt.Println(lAPos == snpFromFile.APos)
@@ -3042,24 +3081,25 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 						// chkSNP = checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))}
 						// snpArr = append(snpArr, checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))})
 						// buffer.WriteString(fmt.Sprintf("%v_%v:%v_%v>%v\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
-
+						// fmt.Println(file, fmt.Sprintf("%v:%v_%v>%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1
 					} else if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) == strings.ToUpper(alt) {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v]", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+						// fmt.Println(file, fmt.Sprintf("%v:%v_%v>%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1
 					}
 				}
 			}
 
 			isNotFound[file] = len(mapofSNP[file])
-			// fmt.Println(mapofSNP)
 
-			// if len(mapofSNP) == 0 {
-			// 	fmt.Println("Не было обнаружено ни одного совпадения в файле ", file, " между позициями в исследуемых файлах и списком СНИПов. Это может быть следствием того, что либо в ваших данных отсутствуют данные позиции, либо результатом использования различных референсных геномов при картировании и при анализе.  Обратите внимание на то, что имена локусов также могут быть различными и приведите ваш список сравнения соответственно используемому референсному геному. ")
-			// 	// }
-			// }
 		}
 
 		if isNotFound[file] == 0 {
 			mapofSNP[file] = append(mapofSNP[file], "NO_SNPS_FOUND")
+
 		}
 
 	}
@@ -3070,27 +3110,19 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 		foundName := make(map[string][]string)
 		// fmt.Println(rulesArr)
 		for fname, val := range mapofSNP {
+
 			for _, tag := range rulesArr {
 				// fmt.Println(tag.Name)
 				for i := 0; i <= len(tag.Variants)-1; i++ {
-					// if strings.Count(strings.Join(val, ","), tag.Variants[i]) == 0 {
-					// 	fmt.Println(val)
-					// }
+
 					if strings.Contains(strings.ToUpper(strings.Join(val, ",")), tag.Variants[i]) == true {
 						// fmt.Println(strings.Count(strings.Join(val, ","), tag.Variants[i]), found)
 						found[fname] = appendIfMissing(found[fname], strings.ToUpper(tag.Variants[i]))
-						// fmt.Println(tag.Variants[i])
-						// fmt.Println(found)
-						// fmt.Println(tag.Name)
-						// if tag.Name == "SENSITIVE" {
-						// 	fmt.Println(len(found[fname]), tag.Lenght, tag)
-						// }
+
 						if len(found[fname]) == tag.Lenght {
 
 							foundName[fname] = appendIfMissing(foundName[fname], strings.ToUpper(tag.Name))
 
-							// fmt.Println(tag.Name, found[fname])
-							// fmt.Println(tag.Name)
 						}
 
 					}
@@ -3109,29 +3141,55 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 	} else {
 		for key, val := range mapofSNP {
 			chkSNP = append(chkSNP, checkSNP{FileName: key, FoundSNP: strings.Join(val, ",")})
+
 		}
 	}
 
-	if web == true {
+	if *statAsTable == false {
 
-		printSNPfromFile(chkSNP, *gbPort)
+		if web == true {
+
+			printSNPfromFile(chkSNP, *gbPort)
+		} else {
+
+			for _, key := range chkSNP {
+
+				fmt.Printf("%v\t%v\t%v\t%v\n", key.FileName, key.FoundSNP, key.ExactWithRule, key.RuleNames)
+
+			}
+
+		}
 	} else {
+		mutationsLits = removeStringDuplicates(mutationsLits)
+		mutationsLits = append([]string{"file"}, mutationsLits...)
+		results := make([]string, len(mutationsLits))
+		fmt.Println(strings.Join(mutationsLits, "\t"))
+		for _, file := range *files {
+			for i := 0; i < len(mutationsLits); i++ {
+				results[0] = file
+				if snpFound[file][mutationsLits[i]] == 1 {
+					results[i] = "1"
+				} else if snpFound[file][mutationsLits[i]] == 0 {
+					results[i] = "0"
 
-		// for _, fname := range *files {
-		// 	if isNotFound[fname] != 0 {
-		// 		fmt.Println(chkSNP.)
-		// 		// fmt.Printf("%v\t%v\t%v\n", key.FileName, key.FoundSNP, key.ExactWithRule)
-		// 	} else {
+				}
+				// if i == 7 || i == 3 {
+				// 	results[i] = "+"
 
-		// 	}
-		// }
-		// fmt.Println(chkSNP)
-		for _, key := range chkSNP {
-			fmt.Printf("%v\t%v\t%v\t%v\n", key.FileName, key.FoundSNP, key.ExactWithRule, key.RuleNames)
-
+				// } else {
+				// 	results[i] = "-"
+				// }
+			}
+			fmt.Println(strings.Join(results, "\t"))
 		}
+
 	}
-	// fmt.Println(isNotFound)
+	// if *statAsBinary=true {
+
+	// }
+
+	// fmt.Println(snpFound)
+
 }
 
 func appendIfMissing(slice []string, val string) []string {
@@ -4289,8 +4347,7 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 			fileLabel              = make(map[int][]string)
 			PosInGenome            = make(map[string]map[int]string)
 			PosAdditionalInfo      = make(map[int]string)
-
-			genomes []string
+			genomes                []string
 		)
 
 		if *statGroupFromFile != "" {
@@ -4309,14 +4366,16 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 				scanTxt := scanner.Text()
 
 				for _, grpVal := range groupRegexp.FindAllStringSubmatch(scanTxt, -1) {
-					group[grpVal[1]] = strings.ToUpper(grpVal[2])
-					label[grpVal[1]] = grpVal[3]
+					group[strings.ToUpper(grpVal[1])] = strings.ToUpper(grpVal[2])
+
+					label[strings.ToUpper(grpVal[1])] = grpVal[3]
 
 					// fmt.Println(grpVal)
 				}
 			}
 
 		}
+
 		// fmt.Println(group)
 		if len(group) != 0 {
 			groupHeader = "Group\t"
@@ -4394,11 +4453,12 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 					posFreq[allpos] = append(posFreq[allpos], mut)
 					if len(group) != 0 {
 						fileGroup[allpos] = append(fileGroup[allpos], group[strings.ToUpper(gname)])
+
 						if len(label) != 0 {
 							fileLabel[allpos] = append(fileLabel[allpos], label[strings.ToUpper(gname)])
 						}
-						// groupArr = append(groupArr, group[fname])
-						// groupBody = fmt.Sprintf("\t%v\t", group[fname])
+						// fmt.Printf("%v\t%v\t%v\n", allpos, group[strings.ToUpper(gname)], strings.ToUpper(gname))
+
 					} else {
 						groupBody = "\t"
 					}
@@ -4416,13 +4476,21 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 			if len(group) != 0 {
 				sort.Strings(fileGroup[allpos])
 				uniq := removeStringDuplicates(fileGroup[allpos])
-				groupBody = fmt.Sprintf("\t%v\t", strings.Join(uniq, ""))
-				// fmt.Println(groupBody)
+				if len(uniq) == 1 {
+					if uniq[0] == "" {
+						uniq = append(uniq, "-")
+					}
+				}
+				groupBody = fmt.Sprintf("\t%v\t", strings.Trim(strings.Join(uniq, " "), " "))
+
 			}
+
 			if len(label) != 0 {
 				sort.Strings(fileLabel[allpos])
 				uniq := removeStringDuplicates(fileLabel[allpos])
-				groupBody = fmt.Sprintf("%v%v\t", groupBody, strings.Join(uniq, " "))
+
+				groupBody = fmt.Sprintf("%v%v\t", groupBody, strings.Trim(strings.Join(uniq, " "), " "))
+
 			}
 
 			buffer.WriteString(fmt.Sprintln(allpos, "\t", gname, groupBody, PosAdditionalInfo[allpos], strings.Join(posFreq[allpos], "\t")))
@@ -7422,11 +7490,14 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 		}
 	} else {
 		for _, key := range keys {
-			if foundPos[key].TypeOf == "CDS" {
+
+			if foundPos[key].TypeOf == "CDS" || foundPos[key].TypeOf == "repeat_region" {
+
 				direction := foundPos[key].Direction
 				locus = foundPos[key].Locus
 				start, end := getGenePosByName(locus)
 				prod := getProductByName(locus)
+
 				if direction == "f" {
 					if *statFlankLeft != 0 {
 						leftPos := start - *statFlankLeft
@@ -7446,7 +7517,7 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 					seqArr = strings.Split(seq, "")
 					seqArr[posInGene-1] = fmt.Sprintf("\n[%v/%v]\n", refNuc, altNuc)
 					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v, %v %v] ", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)), leftFlankDescr, rightFlankDescr)
-				} else if direction == "r" {
+				} else if direction == "r" && *statReverse == true {
 					if *statFlankLeft != 0 {
 						rightPos := end + *statFlankLeft
 						rightFlankSeq = getReverseComplement(getNucFromGenome(end, rightPos))
@@ -7465,6 +7536,26 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 
 					seqArr[posInGene-1] = fmt.Sprintf("\n[%v/%v]\n", refNuc, altNuc)
 					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v, %v %v ] ", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)), leftFlankDescr, rightFlankDescr)
+
+				} else if direction == "r" && *statReverse == false {
+					if *statFlankLeft != 0 {
+						leftPos := start - *statFlankLeft
+						leftFlankSeq = getNucFromGenome(leftPos, end)
+						leftFlankDescr = fmt.Sprintf("+left=%v", *statFlankLeft)
+					}
+					if *statFlankRight != 0 {
+						rightPos := end + *statFlankLeft
+						rightFlankSeq = getNucFromGenome(start, rightPos)
+						rightFlankDescr = fmt.Sprintf("+right=%v", *statFlankRight)
+					}
+					refNuc = getReverseComplement(foundPos[key].NucInPos)
+					posInGene = (end - key) + 1
+					altNuc = getReverseComplement(foundPos[key].Alt)
+					// posInGeneT := foundPos[key].PosInGene
+					seq = getNucFromGenome(start, end)
+					seqArr = strings.Split(seq, "")
+					seqArr[posInGene-1] = fmt.Sprintf("\n[%v/%v]\n", refNuc, altNuc)
+					locusDescr = fmt.Sprintf("%v [apos:%v,posInG:%v,iupac:%v, %v %v] ", locus, key, posInGene, getIUPAC(fmt.Sprintf("%v%v", refNuc, altNuc)), leftFlankDescr, rightFlankDescr)
 				}
 				// posInGene := posInGeneFromEnd + posInGeneFromStart
 				// seqArr[posInGene+1] = fmt.Sprintf("[%v|%v]", seqArr[posInGene+1], refNuc)
@@ -7483,4 +7574,12 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 			}
 		}
 	}
+}
+
+func reverse(data []string) []string {
+	for i := 0; i < len(data)/2; i++ {
+		j := len(data) - i - 1
+		data[i], data[j] = data[j], data[i]
+	}
+	return data
 }
