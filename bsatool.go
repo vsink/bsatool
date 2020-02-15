@@ -121,14 +121,15 @@ var (
 	annDB     = annAction.Flag("db", "Name of database").Short('b').Required().String()
 	annVCF    = annAction.Flag("vcf", "Input VCF file").Short('i').Required().String()
 	// annWeb           = annAction.Flag("web", "").Bool()
-	annMakeSeq       = annAction.Flag("mkseq", "NC or AA").Short('m').String()
+	annMakeSeq       = annAction.Flag("mkseq", "NC, AA, Binary").Short('m').String()
+	annBinOutFormat  = annAction.Flag("binary-output", "Output format for binary data (phylip, nexus)").Default("phylip").String()
 	annMakeSeqRef    = annAction.Flag("ref", "Generate reference sequence").Short('r').Default("false").Bool()
 	annWithFilenames = annAction.Flag("wfn", "Show filenames in list annotated VCF's").Short('n').Bool()
 	annInDel         = annAction.Flag("indel", "indel detection").Bool()
 	annBench         = annAction.Flag("annprof", "cpuprofile").String()
-	annSeqLen        = annAction.Flag("len", "lenght of sequence").Int()
+	annSeqLen        = annAction.Flag("len", "length of sequence").Int()
 	annShowFileName  = annAction.Flag("filename", "Show filename in first column for next analysis").Default("false").Bool()
-	annPosFile       = annAction.Flag("pos-file", "Create positions.txt file with information of each pos in sequence").Default("false").Bool()
+	annPosFile       = annAction.Flag("pos-file", "Create positions.txt file with information of each pos in sequence").String()
 	annMinPosNbr     = annAction.Flag("min-pos-nbr", "Set minimal threshhold of presence of position in sequence").Default("1").Int()
 	// annBench         = annAction.Flag("cpuprofile", "cpuprofile").String()
 
@@ -160,8 +161,8 @@ var (
 	statCircos          = statAction.Flag("circos", "export to circos file").Bool()
 	statCircosGC        = statAction.Flag("gc", "export to circos file").Bool()
 	statGName           = statAction.Flag("gname", "set strain name").String()
-	statFlankLeft       = statAction.Flag("flank_left", "number of left nuclotides").Int()
-	statFlankRight      = statAction.Flag("flank_right", "number of right nuclotides").Int()
+	statFlankLeft       = statAction.Flag("flank_left", "number of left nucleotides").Int()
+	statFlankRight      = statAction.Flag("flank_right", "number of right nucleotides").Int()
 	statAsTable         = statAction.Flag("table", "show results of check info as table").Bool()
 	statReverse         = statAction.Flag("reverse", "make seq for complementnary genes in gene direction").Bool()
 	statAsBinary        = statAction.Flag("binary", "show results of check info as binary sequence").Bool()
@@ -2111,9 +2112,9 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 
 	// -pos_file ФЛАГ
 
-	if *annPosFile && typeof == ncFlag {
-		fOut, err := os.Create("positions.txt")
-		fOutF, err := os.Create("positions_files.txt")
+	if *annPosFile != "" && typeof == ncFlag {
+		fOut, err := os.Create(*annPosFile)
+		fOutF, err := os.Create(fmt.Sprintf("%v_files.txt", *annPosFile))
 		if err != nil {
 			log.Fatal("Cannot create file", err)
 		}
@@ -6174,11 +6175,6 @@ func matrixBinaryMST(fileOut string, verbose bool, exGenes map[int]int, exSNPs m
 
 func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs map[int]int, randomize bool, dp int) {
 
-	// type aaCoords struct {
-	// 	ref, alt string
-	// 	// Len       int
-	// }
-
 	var (
 		AllPos, SelectedPos []int
 
@@ -6192,15 +6188,10 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 		prod        = make(map[int]string)
 		indel       = make(map[int]int)
 		filesPOS    = make(map[int][]string)
-		// tmp         = make(map[int]int)fmt.Println(val.Indel)
-		// posCount             = make(map[int]int)
+		nexusTaxa   = make(map[string][]string)
+		nChar       int
+		nTax        int
 	)
-
-	// files := getListofVCF()
-
-	// queryChan := make(chan vcfInfoQuery)
-
-	// fmt.Println(exGenes)
 
 	if *annSeqLen != 0 {
 		nbrOfSNP = *annSeqLen
@@ -6213,7 +6204,6 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 		// создаем запрос в виде типа vcfQuery, который передается через канал на выход <-qSNP.OutChan
 		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery), Print: verbose}
 		go qSNP.request()
-		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
 		snpRes := <-qSNP.OutChan
 		snpCacheMap[snpRes.File] = snpRes.SnpInfo
 		if verbose == true {
@@ -6241,27 +6231,19 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 				for key, value := range exGenes {
 					if val.APos >= key && val.APos <= value {
 
-						// fmt.Println(val.Locus, val.Start, val.End, val.Product)
-						// passSNP["genes"] = passSNP["genes"] + 1
 						uniqSNP[val.APos] = 2
-						// fmt.Println(val.APos, val.Locus, "by gene passed", val.Product)
 
 						continue
 					} else if exSNPs[val.APos] == 1 {
-						// passSNP["snp"] = passSNP["snp"] + 1
-						uniqSNP[val.APos] = 2
-						// fmt.Println(val.APos, val.Locus, "by snp passed", val.Product)
-						continue
 
-						// fmt.Println(val.APos)
+						uniqSNP[val.APos] = 2
+
+						continue
 
 					} else {
 						if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 && val.DP >= dp {
 							uniqSNP[val.APos] = 1
 							aaAltCoords[fname][val.APos] = val.AltAAShort
-
-							// fmt.Println(fname, val.APos, val.AltAAShort, val.RefAAShort)
-							// fmt.Println(aaAltCoords)
 
 						}
 					}
@@ -6272,20 +6254,12 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 					aaAltCoords[fname][val.APos] = val.AltAAShort
 					aaRefCoords[val.APos] = val.RefAAShort
 
-					// fmt.Println(fname, val.APos, val.AltAAShort, val.RefAAShort)
-					// fmt.Println(aaAltCoords)
-
 				}
-				// AllPosUnsort = append(AllPosUnsort, val.APos)
+
 			}
 
-			// if exGenes[val.Locus] != 1 && exSNPs[string(val.APos)] != 1 {
-			// 	AllPosUnsort = append(AllPosUnsort, val.APos)
-			// }
 		}
 	}
-
-	// fmt.Println(uniqSNP)
 
 	for key, value := range uniqSNP {
 
@@ -6293,16 +6267,12 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 
 			if len(dpMAP[key]) >= *annMinPosNbr {
 				AllPos = append(AllPos, key)
-				// fmt.Println(len(dp[key]), len(*files))
-				// } else if value == 2 {
-				// 	fmt.Println(key)
+
 			}
 
 		}
 
 	}
-	// go process("Working...          ")
-	// AllPos = unique(AllPosUnsort)
 
 	sort.Ints(AllPos)
 
@@ -6324,21 +6294,16 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 		}
 	} else {
 		for i := 0; i <= nbrOfSNP; i++ {
-			// rnd := rand.Intn(len(AllPos)-i) + i
-			// fmt.Println(AllPos[rnd])
 
 			SelectedPos = append(SelectedPos, AllPos[i])
 		}
 	}
-	// fmt.Println(AllPos[0])
-
-	// rand.Intn(max - min) + min
 
 	sort.Ints(SelectedPos)
 
-	if *annPosFile {
-		fOut, err := os.Create("positions.txt")
-		fOutF, err := os.Create("positions_files.txt")
+	if *annPosFile != "" {
+		fOut, err := os.Create(*annPosFile)
+		fOutF, err := os.Create(fmt.Sprintf("%v_files.txt", *annPosFile))
 		if err != nil {
 			log.Fatal("Cannot create file", err)
 		}
@@ -6359,157 +6324,109 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 		}
 
 	}
-
-	// if ref == true {
-	// 	switch typeof {
-	// 	case ncFlag:
-	// 		var refBuffer strings.Builder
-	// 		refBuffer.WriteString(fmt.Sprintf(">%v\n", "REFERENCE"))
-	// 		for _, allpos := range SelectedPos {
-	// 			refBuffer.WriteString(getNucFromGenomePos(allpos))
-	// 		}
-	// 		ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String(), UsedPositions: SelectedPos})
-
-	// 	}
-	// }
-
+	nTax = len(snpCacheMap)
+	nChar = len(SelectedPos)
 	// fmt.Println(AllPos)
-	fmt.Printf("%v\t%v\n", len(snpCacheMap), len(SelectedPos))
+	if *annBinOutFormat == "phylip" {
+		fmt.Printf("%v\t%v\n", nTax, nChar)
+	}
 	for fname, snps := range snpCacheMap {
 
-		// if verbose == true {
-		// 	fmt.Printf("Generating sequences: Working on  %v from %v \r", i+1, len(snps.File))
-		// }
 		pos := make(map[int]string)
-		// altAA := make(map[int]string)
-		// refAA := make(map[int]string)
+
 		var buffer strings.Builder
-		// var i int
-		// var aaSNPpos []int
 
-		// var test strings.Builder
-
-		// buffer.WriteString(fmt.Sprintf(">%v\n", strings.ToUpper(fname)))
 		switch typeof {
 		case "Binary":
 
-			for _, val := range snps {
-				pos[val.APos] = val.Alt
-				// if exGenes[val.Locus] == 1 {
-				// 	fmt.Println(val.Locus)
-				// }
+			if *annBinOutFormat == "phylip" {
+				for _, val := range snps {
+					pos[val.APos] = val.Alt
 
-			}
-			for _, allpos := range SelectedPos {
-				// posCount[allpos] = posCount[allpos] + 1
-				if pos[allpos] != "" {
+				}
+				for _, allpos := range SelectedPos {
+					// posCount[allpos] = posCount[allpos] + 1
+					if pos[allpos] != "" {
 
-					buffer.WriteString("1")
-				} else {
+						buffer.WriteString("1")
+					} else {
 
-					buffer.WriteString("0")
+						buffer.WriteString("0")
+					}
+
+				}
+
+				fmt.Println(fname, "\t", buffer.String())
+
+			} else if *annBinOutFormat == "nexus" {
+
+				for _, val := range snps {
+					pos[val.APos] = val.Alt
+
+				}
+				for _, allpos := range SelectedPos {
+					// posCount[allpos] = posCount[allpos] + 1
+					if pos[allpos] != "" {
+
+						nexusTaxa[fname] = append(nexusTaxa[fname], "1")
+					} else {
+
+						nexusTaxa[fname] = append(nexusTaxa[fname], "0")
+					}
+
 				}
 
 			}
 
-			fmt.Println(fname, "\t", buffer.String())
-
-			// fmt.Println(fname)
-			// fmt.Println(buffer.Len())
-			// fmt.Println(len(buffer.String()))
-
-			// case aaFlag:
-			// 	// for _, val := range snps {
-			// 	// 	pos[val.APos] = val.Alt
-			// 	// 	// if exGenes[val.Locus] == 1 {
-			// 	// 	// 	fmt.Println(val.Locus)
-			// 	// 	// }
-
-			// 	// }
-
-			// 	for _, allpos := range SelectedPos {
-			// 		if aaAltCoords[fname][allpos] == "" {
-			// 			buffer.WriteString(strings.ToLower(aaRefCoords[allpos]))
-			// 			aaSNPpos = append(aaSNPpos, allpos)
-			// 		} else if aaAltCoords[fname][allpos] != "" {
-			// 			aaSNPpos = append(aaSNPpos, allpos)
-			// 			buffer.WriteString(aaAltCoords[fname][allpos])
-			// 		}
-			// 		// posCount[allpos] = posCount[allpos] + 1
-			// 		// if pos[allpos] != "" {
-			// 		// 	fmt.Println(aaAltCoords[fname][allpos].alt)
-			// 		// 	// buffer.WriteString(pos[allpos])
-			// 		// } else {
-			// 		// 	fmt.Println(aaAltCoords[fname][allpos].ref)
-
-			// 		// 	// buffer.WriteString(getNucFromGenomePos(allpos))
-			// 		// }
-
-			// 	}
-			// 	// fmt.Println("reserved")
-			// 	// for _, val := range snps {
-			// 	// 	pos[val.APos] = val.Alt
-			// 	// 	altAA[val.APos] = val.AltAAShort
-			// 	// 	refAA[val.APos] = val.RefAAShort
-			// 	// 	i++
-			// 	// 	if i <= nbrOfSNP {
-			// 	// 		aaSNPpos = append(aaSNPpos, val.APos)
-			// 	// 	}
-
-			// 	// }
-			// 	// fmt.Println(allGenesVal)
-			// 	// for i := 0; i < len(SelectedPos); i++ {
-			// 	// fmt.Println(SelectedPos[i])
-			// 	// for _, g := range allGenesVal {
-			// 	// 	snp := getSnpInfo(SelectedPos[i], g, pos[SelectedPos[i]], false)
-			// 	// 	fmt.Println(snp.APos, snp.RefAAShort, snp.AltAAShort)
-			// 	// }
-			// 	// }
-
-			// 	// for _, allpos := range aaSNPpos {
-
-			// 	// 	for _, val := range geneCoordinates {
-			// 	// 		if allpos >= val.Start && allpos <= val.End {
-			// 	// 			if altAA[allpos] != "" {
-
-			// 	// 				buffer.WriteString(altAA[allpos])
-			// 	// 			} else {
-			// 	// 				buffer.WriteString(refAA[allpos])
-
-			// 	// 			}
-
-			// 	// 		}
-			// 	// 	}
-
-			// 	// 	// for z := 0; z < len(allGenesVal); z++ {
-			// 	// 	// if allpos >= allGenesVal[z].Start && allpos <= allGenesVal[z].End {
-			// 	// 	// 	fmt.Println("YES", allpos)
-			// 	// 	// 	// 		snp := getSnpInfo(allpos, allGenesVal[z], pos[allpos], false)
-			// 	// 	// 	// 		// fmt.Println(allpos, snp.RefAAShort)
-			// 	// 	// 	// 		buffer.WriteString(strings.ToLower(snp.RefAAShort))
-			// 	// 	// 	// 		// test.WriteString("," + strconv.Itoa(allpos))
-			// 	// 	// 	// 	}
-			// 	// 	// } else {
-			// 	// 	// 	fmt.Println("NO", allpos)
-			// 	// 	// }
-			// 	// 	// }
-			// 	// 	// posCount[allpos] = posCount[allpos] + 1
-
-			// 	// }
-
-			// 	// // fmt.Println(test.String())
-			// 	ResSeq = append(ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: aaSNPpos})
-
 		}
 	}
 
-	// }
-	// if *gbDebug == true {
-	// 	fmt.Printf("%v\t:\nThere was passed %v SNPs from exclude gene file\n And %v SNPs from exclude snp file\n", fname, passSNP["genes"], passSNP["snp"])
-	// }
-	// }
+	if len(nexusTaxa) != 0 {
+		var taxNbr int
+		// fmt.Println(nexusTaxa)
+		fmt.Printf("#nexus \n\nBEGIN Taxa;\nDIMENSIONS\nntax=%v;\nTAXLABELS\n", nTax)
+		for key, _ := range nexusTaxa {
+			taxNbr++
+			fmt.Printf("[%v]\t'%v'\n", taxNbr, key)
+		}
+		fmt.Printf(";\nEND; [Taxa]\n\nBEGIN Characters;\nDIMENSIONS nchar=%v;\nFORMAT\n\tdatatype=STANDARD\n\tmissing=?\n\tgap=-\n\tsymbols=\"01\"\n\t labels=left\n\ttranspose=no\n\tinterleave=no\n;\nMATRIX\n", nChar)
+		for key, val := range nexusTaxa {
+
+			fmt.Printf("'%v'\t%v\n", key, strings.Join(val, ""))
+		}
+
+		fmt.Printf("\n;\nEnd;\n")
+	}
 
 }
+
+// #nexus
+
+// BEGIN Taxa;
+// DIMENSIONS ntax=2;
+// TAXLABELS
+// [1] 'taxon_1'
+// [2] 'taxon_2'
+// ;
+// END; [Taxa]
+
+// BEGIN Characters;
+// DIMENSIONS nchar=50;
+// FORMAT
+//         datatype=STANDARD
+//         missing=?
+//         gap=-
+//         symbols="01"
+//         labels=left
+//         transpose=no
+//         interleave=no
+// ;
+// MATRIX
+// 'taxon_1'  10001010000000100010000001000001010100000010001000
+// 'taxon_2'  01010001000000000000100000000010000100000000001000
+// ;
+// End;
+
 func matrixBinaryOld(fileOut string) {
 	var (
 		AllPosUnsort, AllPos []int
