@@ -304,9 +304,9 @@ type (
 	}
 
 	rangePosInfo struct {
-		Start, End, Len, Doubles       int
-		Seq, Prod, Gname, Note, Genome string
-		GC                             float64
+		Start, End, Len, Doubles          int
+		Seq, Prod, GeneName, Note, Genome string
+		GC                                float64
 	}
 
 	// g.Start, g.End, g.Locus, g.Product, g.Direction, g.TypeOf
@@ -411,7 +411,7 @@ func main() {
 			fmt.Printf("The %v file is not exist!\n", *dbGenbank)
 			os.Exit(3)
 		}
-		allGenesVal, genomeSeqSlice = geneBankFileParser(*dbGenbank, *gbVerbose)
+		allGenesVal, genomeSeqSlice = geneBankFileParser(*dbGenbank)
 		writeDB(*dbName, allGenesVal)
 
 	case "annotate":
@@ -644,17 +644,17 @@ func main() {
 		// 		res := getRangeFromFile(file, *gbVerbose, *gbNoSeq)
 		// 		// printSequenceRange(res, *gbWeb, *gbPort)
 		// 		for _, val := range res {
-		// 			if locus != val.Gname && first == 0 {
-		// 				locus = val.Gname
+		// 			if locus != val.GeneName && first == 0 {
+		// 				locus = val.GeneName
 		// 				start = val.Start
 		// 				first = 1
-		// 			} else if locus != val.Gname && first == 1 {
+		// 			} else if locus != val.GeneName && first == 1 {
 
 		// 			} else {
 
 		// 			}
-		// 			// fmt.Println(val.Gname)
-		// 			// locus[val.Gname] = locus[val.Gname] + 1
+		// 			// fmt.Println(val.GeneName)
+		// 			// locus[val.GeneName] = locus[val.GeneName] + 1
 
 		// 		}
 
@@ -1168,7 +1168,7 @@ func getNucFromGenomePos(pos int) string {
 
 }
 
-func geneBankFileParser(file string, verbose bool) (g []geneInfo, genomeSplice []string) {
+func geneBankFileParser(file string) (g []geneInfo, genomeSplice []string) {
 	// функция для считывания файла в формате генбанка и занесения строк в массив linesFromGB
 
 	var (
@@ -1589,7 +1589,10 @@ func writeDB(file string, gene []geneInfo) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	defer gobFile.Close()
+	if gobFile!=nil {
+		defer gobFile.Close()
+	}
+
 	compressedGobFile := lzw.NewWriter(gobFile, lzw.LSB, 8)
 	defer compressedGobFile.Close()
 	gobParser := gob.NewEncoder(compressedGobFile)
@@ -1611,7 +1614,10 @@ func readDB(file string) []geneInfo {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	defer gobFile.Close()
+	if gobFile != nil {
+		defer gobFile.Close()
+	}
+
 	compressedGobFile := lzw.NewReader(gobFile, lzw.LSB, 8)
 	defer compressedGobFile.Close()
 	gobParser := gob.NewDecoder(compressedGobFile)
@@ -1986,7 +1992,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 		AllPos, SelectedPos []int
 		ResSeq              []seqInfo
 		// passSNP = make(map[string]int)
-		uniqSNP     = make(map[int]int)
+		uniqueSNP   = make(map[int]int)
 		nbrOfSNP    int
 		aaAltCoords = make(map[string]map[int]string)
 		aaRefCoords = make(map[int]string)
@@ -2037,7 +2043,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 			filesPOS[val.APos] = append(filesPOS[val.APos], fname)
 			indel[val.APos] = val.Indel
 			if val.DP < *gbDP {
-				uniqSNP[val.APos] = 2
+				uniqueSNP[val.APos] = 2
 			}
 
 			if len(exGenes) != 0 {
@@ -2046,33 +2052,33 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 					if val.APos >= key && val.APos <= value {
 						// fmt.Println(val.Locus, val.Start, val.End, val.Product)
 						// passSNP["genes"] = passSNP["genes"] + 1
-						uniqSNP[val.APos] = 2
+						uniqueSNP[val.APos] = 2
 
 						continue
 					} else if exSNPs[val.APos] == 1 {
 						// passSNP["snp"] = passSNP["snp"] + 1
-						uniqSNP[val.APos] = 2
+						uniqueSNP[val.APos] = 2
 						continue
 
 						// fmt.Println(val.APos)
 
 					} else {
-						if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 && val.Indel == 0 {
-							uniqSNP[val.APos] = 1
+						if uniqueSNP[val.APos] != 2 && uniqueSNP[val.APos] != 1 && val.Indel == 0 {
+							uniqueSNP[val.APos] = 1
 							aaAltCoords[fname][val.APos] = val.AltAAShort
 
 							// fmt.Println(fname, val.APos, val.AltAAShort, val.RefAAShort)
 							// fmt.Println(aaAltCoords)
 
 						} else if val.Indel == 1 {
-							uniqSNP[val.APos] = 2
+							uniqueSNP[val.APos] = 2
 							continue
 						}
 					}
 				}
 			} else {
-				if uniqSNP[val.APos] != 2 && uniqSNP[val.APos] != 1 && val.Indel == 0 {
-					uniqSNP[val.APos] = 1
+				if uniqueSNP[val.APos] != 2 && uniqueSNP[val.APos] != 1 && val.Indel == 0 {
+					uniqueSNP[val.APos] = 1
 					aaAltCoords[fname][val.APos] = val.AltAAShort
 					aaRefCoords[val.APos] = val.RefAAShort
 					// fmt.Println(fname, val.APos, val.AltAAShort, val.RefAAShort)
@@ -2088,9 +2094,9 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 		}
 	}
 
-	// fmt.Println(uniqSNP)
+	// fmt.Println(uniqueSNP)
 
-	for key, value := range uniqSNP {
+	for key, value := range uniqueSNP {
 
 		if value == 1 {
 			if len(dpMAP[key]) >= *annMinPosNbr {
@@ -2122,7 +2128,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 		for i := 1; i <= nbrOfSNP; i++ {
 			rnd := rand.Intn(len(AllPos)-i) + i
 			// fmt.Println(AllPos[rnd])
-			if posAlreadyIs[rnd] < 1 {
+			if posAlreadyIs[rnd] < 1    {
 				SelectedPos = append(SelectedPos, AllPos[rnd])
 				posAlreadyIs[rnd] = posAlreadyIs[rnd] + 1
 			}
@@ -6555,97 +6561,97 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 // ;
 // End;
 
-func matrixBinaryOld(fileOut string) {
-	var (
-		AllPosUnsort, AllPos []int
-		allLocusUnsort       []string
-		buffer               strings.Builder
-		headers              strings.Builder
-		posCount             = make(map[int]int)
-		snps                 []snpInfo
-		posFN                = make(map[int][]string)
-		posFreq              = map[int][]string{}
-	)
-	// var ResSeq []seqInfo
-
-	// files := getListofVCF()
-	files := &listOfFiles
-
-	// fmt.Println(files)
-	pos := make(map[int]string)
-
-	headers.WriteString("Pos\t")
-
-	for i, file := range *files {
-		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
-
-		fmt.Printf("Counting SNP positions: Working on %v files from %v \r", i+1, len(*files))
-
-		snpsChan := make(chan []snpInfo)
-
-		go func() {
-			snpsChan <- makeSnps(file)
-		}()
-		snps = <-snpsChan
-
-		for _, val := range snps {
-
-			pos[val.APos] = val.Alt
-			// posTest = append(posTest, posByFile{pos: pos, file: file, apos: val.APos})
-			if strings.Contains(strings.Join(posFN[val.APos], " "), file) == false {
-				posFN[val.APos] = append(posFN[val.APos], file)
-			}
-
-			AllPosUnsort = append(AllPosUnsort, val.APos)
-			posCount[val.APos] = posCount[val.APos] + 1
-			if val.TypeOf == "CDS" {
-				allLocusUnsort = append(allLocusUnsort, val.Locus)
-			}
-
-		}
-
-	}
-	AllPos = unique(AllPosUnsort)
-	// allLocuses = removeStringDuplicates(allLocusUnsort)
-	sort.Ints(AllPos)
-
-	for _, file := range *files {
-		for _, allpos := range AllPos {
-
-			if strings.Contains(strings.Join(posFN[allpos], " "), file) {
-
-				posFreq[allpos] = append(posFreq[allpos], "1")
-			} else {
-				// fmt.Println(allpos, 0, file)
-				posFreq[allpos] = append(posFreq[allpos], "0")
-			}
-
-		}
-	}
-
-	for _, allpos := range AllPos {
-		if posCount[allpos] < len(*files) {
-
-			buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
-
-		}
-	}
-	headers.WriteString("\n")
-
-	if buffer.Len() != 0 && headers.Len() != 0 {
-		fOut, err := os.Create(fileOut)
-		if err != nil {
-			log.Fatal("Cannot create file", err)
-		}
-		defer fOut.Close()
-		_, _ = fmt.Fprintf(fOut, headers.String())
-		_, _ = fmt.Fprintf(fOut, buffer.String())
-		fmt.Printf("\n\nWell done!\n")
-		// t1 := time.Now()
-		// fmt.Printf("Elapsed time: %v", fmtDuration(t1.Sub(t0)))
-	}
-
-}
+// func matrixBinaryOld(fileOut string) {
+// 	var (
+// 		AllPosUnsort, AllPos []int
+// 		allLocusUnsort       []string
+// 		buffer               strings.Builder
+// 		headers              strings.Builder
+// 		posCount             = make(map[int]int)
+// 		snps                 []snpInfo
+// 		posFN                = make(map[int][]string)
+// 		posFreq              = map[int][]string{}
+// 	)
+// 	// var ResSeq []seqInfo
+// 
+// 	// files := getListofVCF()
+// 	files := &listOfFiles
+// 
+// 	// fmt.Println(files)
+// 	pos := make(map[int]string)
+// 
+// 	headers.WriteString("Pos\t")
+// 
+// 	for i, file := range *files {
+// 		headers.WriteString(fmt.Sprintf("%v\t", strings.TrimSuffix(file, filepath.Ext(file))))
+// 
+// 		fmt.Printf("Counting SNP positions: Working on %v files from %v \r", i+1, len(*files))
+// 
+// 		snpsChan := make(chan []snpInfo)
+// 
+// 		go func() {
+// 			snpsChan <- makeSnps(file)
+// 		}()
+// 		snps = <-snpsChan
+// 
+// 		for _, val := range snps {
+// 
+// 			pos[val.APos] = val.Alt
+// 			// posTest = append(posTest, posByFile{pos: pos, file: file, apos: val.APos})
+// 			if strings.Contains(strings.Join(posFN[val.APos], " "), file) == false {
+// 				posFN[val.APos] = append(posFN[val.APos], file)
+// 			}
+// 
+// 			AllPosUnsort = append(AllPosUnsort, val.APos)
+// 			posCount[val.APos] = posCount[val.APos] + 1
+// 			if val.TypeOf == "CDS" {
+// 				allLocusUnsort = append(allLocusUnsort, val.Locus)
+// 			}
+// 
+// 		}
+// 
+// 	}
+// 	AllPos = unique(AllPosUnsort)
+// 	// allLocuses = removeStringDuplicates(allLocusUnsort)
+// 	sort.Ints(AllPos)
+// 
+// 	for _, file := range *files {
+// 		for _, allpos := range AllPos {
+// 
+// 			if strings.Contains(strings.Join(posFN[allpos], " "), file) {
+// 
+// 				posFreq[allpos] = append(posFreq[allpos], "1")
+// 			} else {
+// 				// fmt.Println(allpos, 0, file)
+// 				posFreq[allpos] = append(posFreq[allpos], "0")
+// 			}
+// 
+// 		}
+// 	}
+// 
+// 	for _, allpos := range AllPos {
+// 		if posCount[allpos] < len(*files) {
+// 
+// 			buffer.WriteString(fmt.Sprintln(allpos, "\t", strings.Join(posFreq[allpos], "\t")))
+// 
+// 		}
+// 	}
+// 	headers.WriteString("\n")
+// 
+// 	if buffer.Len() != 0 && headers.Len() != 0 {
+// 		fOut, err := os.Create(fileOut)
+// 		if err != nil {
+// 			log.Fatal("Cannot create file", err)
+// 		}
+// 		defer fOut.Close()
+// 		_, _ = fmt.Fprintf(fOut, headers.String())
+// 		_, _ = fmt.Fprintf(fOut, buffer.String())
+// 		fmt.Printf("\n\nWell done!\n")
+// 		// t1 := time.Now()
+// 		// fmt.Printf("Elapsed time: %v", fmtDuration(t1.Sub(t0)))
+// 	}
+// 
+// }
 
 func makeSnps(fname string) (snps []snpInfo) {
 	qSNP := &vcfQuery{File: fname, OutChan: make(chan vcfInfoQuery)}
@@ -6760,13 +6766,13 @@ func getSequenceRange(PosRange string, noseq bool) rangePosInfo {
 		if noseq == true {
 			gname, _ := getGeneNameByPos(resStart, resEnd)
 			prod, _ := getProductByPos(resStart, resEnd)
-			result = rangePosInfo{Start: resStart + 1, End: resEnd, Gname: gname, Prod: prod}
+			result = rangePosInfo{Start: resStart + 1, End: resEnd, GeneName: gname, Prod: prod}
 
 		} else if noseq == false {
 			seq := getNucFromGenome(resStart-1, resEnd)
 			gname, _ := getGeneNameByPos(resStart, resEnd)
 			prod, _ := getProductByPos(resStart, resEnd)
-			result = rangePosInfo{Start: resStart + 1, End: resEnd, Gname: gname, Len: len(seq), Seq: seq, Prod: prod}
+			result = rangePosInfo{Start: resStart + 1, End: resEnd, GeneName: gname, Len: len(seq), Seq: seq, Prod: prod}
 
 		}
 		// fmt.Println(result)
@@ -6785,7 +6791,7 @@ func printSequenceRange(rangeList []rangePosInfo, web bool, port string, toCirco
 	case false:
 		if toCircos == true && *statCircosGC == false {
 			basicAnnotation = "{{range $element := .}}" +
-				"{{.Genome}}\t{{.Start}}\t{{.End}}\t{{.Gname}}\n" +
+				"{{.Genome}}\t{{.Start}}\t{{.End}}\t{{.GeneName}}\n" +
 				"{{end}}"
 
 		} else if toCircos == true && *statCircosGC == true {
@@ -6798,16 +6804,16 @@ func printSequenceRange(rangeList []rangePosInfo, web bool, port string, toCirco
 
 			basicAnnotation = "{{range $element := .}}" +
 				">" +
-				"{{.Genome}}[{{.Start}}" + ":" + "{{.End}}]{{.Gname}}\n" +
+				"{{.Genome}}[{{.Start}}" + ":" + "{{.End}}]{{.GeneName}}\n" +
 				"{{.Seq}}\n" +
 				"{{end}}"
 
 		} else {
 			basicAnnotation = "{{range $element := .}}" +
 				"{{if .Seq}}" +
-				"{{.Gname}}\t{{.Start}}\t{{.End}}\t{{.Len}}\t{{.GC}}\t{{.Seq}}\t{{.Prod}}\t{{.Doubles}}\n" +
+				"{{.GeneName}}\t{{.Start}}\t{{.End}}\t{{.Len}}\t{{.GC}}\t{{.Seq}}\t{{.Prod}}\t{{.Doubles}}\n" +
 				"{{else}}" +
-				"{{.Gname}}\t{{.Start}}\t{{.End}}\t{{.Len}}\t{{.GC}}\t{{.Prod}}\t{{.Doubles}}\n" +
+				"{{.GeneName}}\t{{.Start}}\t{{.End}}\t{{.Len}}\t{{.GC}}\t{{.Prod}}\t{{.Doubles}}\n" +
 				"{{end}}" +
 				"{{end}}"
 
@@ -6832,9 +6838,9 @@ func printSequenceRange(rangeList []rangePosInfo, web bool, port string, toCirco
 			<tr>			
 			{{range $element := .}}	
 			{{if .Seq}}
-			<td>{{.Gname}}</td><td>{{.Start}}</td><td>{{.End}}</td><td>{{.Len}}</td><td><p title="GC content: {{.GC}}"><textarea rows="3" style="width:400px; word-wrap:break-word;">{{.Seq}}</textarea></p></td><td>{{.Len}}</td><td><p title="{{.Note}}">{{.Prod}}</p></td><td>{{.Doubles}}</td>
+			<td>{{.GeneName}}</td><td>{{.Start}}</td><td>{{.End}}</td><td>{{.Len}}</td><td><p title="GC content: {{.GC}}"><textarea rows="3" style="width:400px; word-wrap:break-word;">{{.Seq}}</textarea></p></td><td>{{.Len}}</td><td><p title="{{.Note}}">{{.Prod}}</p></td><td>{{.Doubles}}</td>
 			{{else}} 
-			<td>{{.Gname}}</td><td>{{.Start}}</td><td>{{.End}}</td><td>{{.Len}}</td><td><p title="{{.Note}}">{{.Prod}}</p></td><td>{{.Doubles}}</td>
+			<td>{{.GeneName}}</td><td>{{.Start}}</td><td>{{.End}}</td><td>{{.Len}}</td><td><p title="{{.Note}}">{{.Prod}}</p></td><td>{{.Doubles}}</td>
 			{{end}}
 			</tr>	
 			{{end}}		
@@ -6892,6 +6898,7 @@ func getHashSNP(snp snpInfo) uint64 {
 
 	// fmt.Printf("%d", hash)
 	return hash
+}
 }
 
 func getHash(str string) uint64 {
@@ -6984,10 +6991,10 @@ func getCoordRange(start, end int) {
 
 	var last string
 	for _, val := range res {
-		if val.Gname != last {
-			fmt.Println(val.Gname, val.Prod)
+		if val.GeneName != last {
+			fmt.Println(val.GeneName, val.Prod)
 		}
-		last = val.Gname
+		last = val.GeneName
 
 	}
 
@@ -7102,7 +7109,7 @@ func getRangeFromFile(file string, verbose bool, noseq bool, genome string) []ra
 		gcRes, _ := strconv.ParseFloat(fmt.Sprintf("%.2f", gc), 64)
 		// fixedProd = strings.Replace(prod, "'", " ", -1)
 
-		res := rangePosInfo{Start: val.Start, End: val.End, Gname: gname, Prod: fixedProd, Len: val.End - val.Start + 1, Seq: seq, Doubles: doubles[val.Start+val.End] + 1, Note: note, GC: gcRes, Genome: genome}
+		res := rangePosInfo{Start: val.Start, End: val.End, GeneName: gname, Prod: fixedProd, Len: val.End - val.Start + 1, Seq: seq, Doubles: doubles[val.Start+val.End] + 1, Note: note, GC: gcRes, Genome: genome}
 
 		result = append(result, res)
 		k++
