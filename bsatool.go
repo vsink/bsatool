@@ -195,8 +195,8 @@ var (
 	devPwd    = devAction.Flag("pwd", "Password").Short('p').Required().String()
 
 	betaAction = kingpin.Command("beta", "Beta test mode for testing new functions")
-	betaTask   = betaAction.Flag("complex", "Action...").Short('a').Required().String()
-	// betaDB      = betaAction.Flag("db", "Database").Short('b').Required().String()
+	betaTask   = betaAction.Flag("action", "Action...").Short('a').Required().String()
+	betaDB     = betaAction.Flag("db", "Database").Short('b').Required().String()
 	betaInFile = betaAction.Flag("in", "Input file").Short('i').String()
 	// betaOutFile = betaAction.Flag("out", "Output file").Short('o').String()
 
@@ -691,6 +691,8 @@ func main() {
 				rulesArr = checkRuleFromFile(*statInRule)
 
 			}
+
+		// создает fasta файл основываясь на снипах в границах указзаного диапазона
 		case "coord2seq":
 			/*  go run bsatool.go stat  -b test_core -a coord2seq --vcf=list -i coordsToMakeSeq.txt
 
@@ -705,12 +707,8 @@ func main() {
 				}
 			}
 
+			// проверяет позицию из файла в снипах
 		case "check_pos":
-			/*
-				go run bsatool.go stat  -b test_core -a coord2seq --vcf=list -i coordsToMakeSeq.txt
-
-				 Rv0018c	21637	23181 <-structure file
-			*/
 
 			if *statInFile != "" {
 				// res := coord2gene(*statInFile)
@@ -727,9 +725,9 @@ func main() {
 				}
 			}
 
-		case "locus2seq":
+		case "snp2SeqByLocus":
 			/*
-				go run bsatool.go stat  -b test_core -a locus2seq --vcf=list --locus=Rv1319c
+				go run bsatool.go stat  -b test_core -a snp2SeqByLocus --vcf=list --locus=Rv1319c
 			*/
 
 			if *statLocus != "" && *statVCF == "list" {
@@ -737,7 +735,7 @@ func main() {
 				switch *statCircosTypeOf {
 				case "":
 					for _, file := range listOfFiles {
-						result := locus2seq(*statLocus, file)
+						result := snp2SeqByLocus(*statLocus, file)
 						fmt.Printf(">%v %v(%v:%v) %v\n%v\n", result.vcfFile, result.locus, result.start, result.end, result.prod, result.altSeq)
 
 					}
@@ -780,13 +778,17 @@ func main() {
 		}
 		fmt.Println("DevMode")
 	case "beta":
-
+		allGenesVal = readDB(*betaDB)
 		switch *betaTask {
 
 		case "complex":
 
 			if *betaInFile != "" {
 				calcComplexIdxFromFile(*betaInFile)
+			}
+		case "annotateFromList":
+			if len(*betaInFile) != 0 {
+				annotateFromList(*betaInFile, allGenesVal)
 			}
 		}
 	case "parse_pileup":
@@ -877,6 +879,7 @@ func main() {
 
 				prod := getProductByName(*infoLocus)
 				note := getNoteByName(*infoLocus)
+				goa := getGOAByName(*infoLocus)
 
 				// вывод последовательности кодонов заданной ключом --codons=Start:End
 				if *infoCodons != "" {
@@ -913,30 +916,14 @@ func main() {
 
 					if asFasta == false {
 						gc, gc1, gc2, gc3 := codon.GcCodonCalc(seq)
-						fmt.Printf(">%v %v (%v-%v %v)\n%v\n-----------------\ngc:%v gc1:%v gc2:%v gc3:%v Len:%v\n-----------------\n%v\n", *infoLocus, prod, start, end, direction, seq, gc, gc1, gc2, gc3, len(seq), note)
+						fmt.Printf(">%v %v (%v-%v %v)\n%v\n-----------------\ngc:%v gc1:%v gc2:%v gc3:%v Len:%v\n-----------------\n%v\ngoa:%v\n", *infoLocus,
+							prod,
+							start, end, direction, seq, gc, gc1, gc2, gc3, len(seq), note, goa)
 					} else {
 
-						fmt.Printf(">%v %v (%v-%v %v) %v \n%v\n", *infoLocus, prod, start, end, direction, flankInfo.String(), seq)
+						fmt.Printf(">%v %v (%v-%v %v) %v \n%v\ngoa:%v\n", *infoLocus, prod, start, end, direction, flankInfo.String(), seq, goa)
 					}
 
-					// snp := checkSNPnotation("Rv1326c	1038G>A	lineage1.1.3 Indo-Oceanic EAI6 RD239")
-					// seqArr := strings.Split(seq, "")
-					// posInGene, _ := strconv.Atoi(snp.PosInGene)
-					// for i := 0; i < len(seqArr); i++ {
-					// 	if *gbVerbose == true {
-
-					// 		seqArr[i] = fmt.Sprintf("%v->%v,", i+1, seqArr[i])
-					// 	}
-					// 	if i+1 == posInGene {
-					// 		seqArr[i] = fmt.Sprintf("[%v_%v>%v]", posInGene, strings.ToUpper(seqArr[i]), snp.Alt)
-					// 	}
-					// }
-					// // seqArr[posInGene+1] = fmt.Sprintf("(%v_%v>%v)", posInGene, strings.ToUpper(seqArr[posInGene+1]), strings.ToUpper(snp.Alt))
-					// altSeq := strings.Join(seqArr, "")
-					// fmt.Println(strings.TrimRight(altSeq, ","))
-
-					// fmt.Println(seqArr[posInGene+1], snp)
-					// fmt.Println(seq, gc, gc1, gc2, gc3, prod)
 				}
 			} else {
 				fmt.Println(colorRed, *infoLocus, " not found!")
@@ -3708,6 +3695,19 @@ func getNoteByName(locus string) string {
 	}
 
 	return note
+}
+
+func getGOAByName(locus string) string {
+	var goa string
+
+	for _, g := range allGenesVal {
+		if strings.ToUpper(locus) == strings.ToUpper(g.Locus) {
+			goa = g.GOA
+			break
+		}
+	}
+
+	return goa
 }
 
 func getDirectionByName(locus string) string {
@@ -7471,7 +7471,7 @@ func coord2seq(file string, vcfFile string) altStringResult {
 	return result
 }
 
-func locus2seq(locus string, vcfFile string) altStringResult {
+func snp2SeqByLocus(locus string, vcfFile string) altStringResult {
 	var (
 		// coords = regexp.MustCompile(`^(\S+)\W+(\d+)\W+(\d+)`)
 		// coordsTwo  = regexp.MustCompile(`^(\w+)\W+(\d+)\W+(\d+)`)
@@ -8194,4 +8194,47 @@ func getUniqSNP(snps []snpInfo, exGenes map[int]int, exSNPs map[int]int) map[int
 
 	}
 	return uniqSNP
+}
+
+func annotateFromList(file string, genes []geneInfo) {
+
+	var (
+		posAlt = regexp.MustCompile(`^(\d+)\W+(\w)\W+(\w)`)
+		snp    snpInfo
+	)
+	f, err := os.Open(file) // открываем файл
+
+	if err != nil {
+		fmt.Println(err)
+
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f) //  новый сканер
+
+	for scanner.Scan() {
+		for _, findPosAlt := range posAlt.FindAllStringSubmatch(scanner.Text(), -1) {
+
+			if len(findPosAlt) == 4 {
+
+				for z := 0; z < len(genes); z++ {
+					// g := genes[z]
+					// lStart := genes[z].Start
+					// lEnd := genes[z].End
+					apos, _ := strconv.Atoi(findPosAlt[1])
+					alt := findPosAlt[3]
+					if apos >= genes[z].Start && apos <= genes[z].End {
+						qSnpInfo := &snpInfoQuery{OutChan: make(chan snpInfo), apos: apos, g: genes[z], alt: alt, index: true}
+						go qSnpInfo.request()
+						snp = <-qSnpInfo.OutChan
+						printTextResults(snp, false)
+						fmt.Println(snp.TangIdxVal)
+					}
+				}
+
+			}
+
+		}
+	}
+
 }
