@@ -3366,8 +3366,12 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 
 					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == snpFromFile.CodonNbrInG {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:codon%v]", val.Name, val.Locus, CodonNbrInG))
-						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
-						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1 // buffer.WriteString(fmt.Sprintf("%v_%v:codon%v\t", val.Name, val.Locus, CodonNbrInG))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, snpFromFile.APos,
+							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, snpFromFile.APos,
+							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt), val.Name)] = 1 // buffer.WriteString(fmt.Sprintf("%v_%v:codon%v\t", val.Name, val.Locus, CodonNbrInG))
 					}
 				case tPMN:
 
