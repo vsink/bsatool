@@ -124,7 +124,7 @@ var (
 	annVCF    = annAction.Flag("vcf", "Input VCF file").Short('i').Required().String()
 	// annWeb           = annAction.Flag("web", "").Bool()
 	annMakeSeq       = annAction.Flag("mkseq", "NC, AA, Binary").Short('m').String()
-	annBinOutFormat  = annAction.Flag("binary-output", "Output format for binary data (phylip, nexus)").Default("phylip").String()
+	annOutFormat     = annAction.Flag("output-format", "Output format for binary data (phylip, nexus)").String()
 	annMakeSeqRef    = annAction.Flag("ref", "Generate reference sequence").Short('r').Default("false").Bool()
 	annWithFilenames = annAction.Flag("wfn", "Show filenames in list annotated VCF's").Short('n').Bool()
 	annInDel         = annAction.Flag("indel", "indel detection").Bool()
@@ -274,12 +274,12 @@ type (
 	}
 
 	seqInfo struct {
-		Name, Seq     string //
-		UsedPositions []int
-		DebugInfo     []string
-
+		Name, Seq, TypeOfSeq string //
+		UsedPositions        []int
+		DebugInfo            []string
 		// Len       int
 	}
+
 	genomeInfo struct {
 		Organism, Strain, Version string
 		Start, End, NucCore       int
@@ -514,7 +514,7 @@ func main() {
 
 			} else if *gbWeb == true && *annMakeSeq == "NC" {
 				createNCWebServer(*gbPort, exGenes, exSNPs)
-			} else if *gbWeb == false && *annMakeSeq != "Binary" {
+			} else if *gbWeb == false && *annMakeSeq != "Binary" && *annOutFormat == "" {
 				// seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef)
 
 				/* alt-range значит, что процент встречаемости альтернативного аллеля в последовательности будет в диапазоне --alt-range=10:80
@@ -523,17 +523,21 @@ func main() {
 				*/
 
 				seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs, *gbRandomize)
-
 				for i := 0; i < len(seq); i++ {
 					fmt.Println(seq[i].Seq)
 				}
 				if *gbDebug == true {
 					fmt.Println(seq[0].UsedPositions)
 				}
+			} else if *gbWeb == false && *annMakeSeq != "Binary" && *annOutFormat == "nexus" {
+				// fmt.Println(exGenes,exSNPs)
+				makeSeqNex(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs, *gbRandomize)
 
 			} else if *gbWeb == false && *annMakeSeq == "Binary" {
 				// go run bsatool.go annotate --vcf list --mkseq=NC  --db test_core
 				// go run bsatool.go annotate --vcf list --mkseq=Binary  --db test_core
+				// go run  bsatool.go annotate --db test_core --vcf list --exclude-genes=ppe.genes --exclude-snp=drugs3.
+				// txt --mkseq=Binary --dp=30 --exclude-regions=exgenes.txt --min-pos-nbr=2 --output-format="nexus"
 
 				makeSeqBinary(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs, *gbRandomize, *gbDP)
 			}
@@ -632,7 +636,7 @@ func main() {
 		case "matrix":
 
 			/*
-			 go run bsatool.go stat -a matrix --db test_core -t binary (binary, gc3, dnds, table, nc, locus. freq, jw) -o test.csv
+			 go run bsatool.go stat -a matrix --db test_core -t binary (binary, gc3, dnds, table, nc, locus. freq, jw, summary) -o test.csv
 			 go run bsatool.go stat   -b test_core  -a matrix -t binary  --exclude-genes=ppe.genes --exclude-snp=drugs3.txt -o test.csv --nbr_pos 2 --debug|grep "passed"
 			*/
 
@@ -1975,6 +1979,9 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 		altPercent     int
 		altMinMax      []string
 		altMin, altMax int
+		// nexusTaxa   = make(map[string][]string)
+		// nChar       int
+		// nTax        int
 
 		// excludedLocus = make(map[int]string)
 		// excludedProd  = make(map[int]string)
@@ -2048,6 +2055,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 							*/
 							uniqueSNP[val.APos] = 1
 							aaAltCoords[fname][val.APos] = val.AltAAShort
+							posFN[val.APos] = append(posFN[val.APos], fname)
 
 						} else if val.Indel == 1 {
 							/*
@@ -2140,6 +2148,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 
 	for _, pos := range TempPos {
 		var count0, count1 int
+
 		for i := 0; i < len(posFreq[pos]); i++ {
 			if posFreq[pos][i] == "0" {
 				count0++
@@ -2153,6 +2162,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 			// }
 			altPercent = (count1 * 100) / len(posFreq[pos])
 			altMinMax = strings.Split(*annAltRange, ":")
+
 			if len(altMinMax) != 0 {
 				altMin, _ = strconv.Atoi(altMinMax[0])
 				altMax, _ = strconv.Atoi(altMinMax[1])
@@ -2205,7 +2215,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 			for _, allpos := range SelectedPos {
 				refBuffer.WriteString(getNucFromGenomePos(allpos))
 			}
-			ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String(), UsedPositions: SelectedPos})
+			ResSeq = append(ResSeq, seqInfo{Name: "reference", Seq: refBuffer.String(), UsedPositions: SelectedPos, TypeOfSeq: "NC"})
 
 		}
 	}
@@ -2235,19 +2245,44 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 				// }
 
 			}
+			// nTax = len(snpCacheMap)
+			// nChar = len(SelectedPos)
 			for _, allpos := range SelectedPos {
 				// posCount[allpos] = posCount[allpos] + 1
 				if pos[allpos] != "" {
 
 					buffer.WriteString(pos[allpos])
+					// nexusTaxa[fname] = append(nexusTaxa[fname], pos[allpos])
+
 				} else {
 
 					buffer.WriteString(getNucFromGenomePos(allpos))
+					// nexusTaxa[fname] = append(nexusTaxa[fname], getNucFromGenomePos(allpos))
 				}
 
-			}
+				// 	var taxNbr int
+				// 	// fmt.Println(nexusTaxa)
+				// 	// fmt.Printf("#nexus \n\nBEGIN Taxa;\nDI
+				//			}
+				//
+				//			// if len(nexusTaxa) != 0 {MENSIONS\nntax=%v;\nTAXLABELS\n", nTax)
+				// 	for key := range nexusTaxa {
+				// 		taxNbr++
+				// 		// fmt.Printf("[%v]\t'%v'\n", taxNbr, key)
+				// 	}
+				//
+				// 	// fmt.Printf(";\nEND; [Taxa]\n\nBEGIN Characters;\nDIMENSIONS nchar=%v;\nFORMAT\n\tdatatype=STANDARD\n\tmissing=?\n\tgap=-\n\tsymbols=\"01\"\n\t labels=left\n\ttranspose=no\n\tinterleave=no\n;\nMATRIX\n", nChar)
+				// 	// for key, val := range nexusTaxa {
+				// 	//
+				// 	// 	fmt.Printf("'%v'\t%v\n", key, strings.Join(val, ""))
+				// 	// }
+				//
+				// 	// fmt.Printf("\n;\nEnd;\n")
+				// }
 
-			ResSeq = append(ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: SelectedPos})
+				ResSeq = append(
+					ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: SelectedPos, TypeOfSeq: "AA"})
+			}
 			// fmt.Println(buffer.Len())
 			// fmt.Println(len(buffer.String()))
 
@@ -2343,6 +2378,296 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 	// }
 
 	return ResSeq
+}
+
+func makeSeqNex(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs map[int]int, randomize bool) {
+
+	var (
+		AllPos, SelectedPos, TempPos []int
+		// passSNP = make(map[string]int)
+		uniqueSNP      = make(map[int]int)
+		nbrOfSNP       int
+		aaAltCoords    = make(map[string]map[int]string)
+		aaRefCoords    = make(map[int]string)
+		dpMAP          = make(map[int][]int)
+		locus          = make(map[int]string)
+		prod           = make(map[int]string)
+		filesPOS       = make(map[int][]string)
+		indel          = make(map[int]int)
+		posFN          = make(map[int][]string)
+		posFreq        = map[int][]string{}
+		altPercent     int
+		altMinMax      []string
+		altMin, altMax int
+		nexusTaxa      = make(map[string][]string)
+		nChar          int
+		nTax           int
+
+		// excludedLocus = make(map[int]string)
+		// excludedProd  = make(map[int]string)
+		// excludedDP    = make(map[int][]int)
+
+		// posCount             = make(map[int]int)
+	)
+
+	// files := getListofVCF()
+
+	// queryChan := make(chan vcfInfoQuery)
+
+	if *annSeqLen != 0 {
+		nbrOfSNP = *annSeqLen
+	}
+
+	files := &listOfFiles
+	for i, file := range *files {
+		aaAltCoords[file] = make(map[int]string)
+
+		// создаем запрос в виде типа vcfQuery, который передается через канал на выход <-qSNP.OutChan
+		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery), Print: verbose}
+		go qSNP.request()
+		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
+		snpRes := <-qSNP.OutChan
+		snpCacheMap[snpRes.File] = snpRes.SnpInfo
+		if verbose == true {
+			fmt.Printf("Reading files:  %v from %v \r", i+1, len(*files))
+		}
+
+	}
+
+	for fname, snps := range snpCacheMap {
+
+		for _, val := range snps {
+			// DP - глубина прочтения СНИПа
+			dpMAP[val.APos] = append(dpMAP[val.APos], val.DP)
+			// indel[val.APos] = val.Indel
+			locus[val.APos] = val.Locus
+			prod[val.APos] = val.Product
+			filesPOS[val.APos] = append(filesPOS[val.APos], fname)
+			indel[val.APos] = val.Indel
+			if val.DP < *gbDP {
+				uniqueSNP[val.APos] = 2
+			}
+
+			// exGenes  - гены, которые необходимо исключить из анализа. Загружаются в виде списка командой --exclude-genes
+			if len(exGenes) != 0 {
+
+				for key, value := range exGenes {
+					if val.APos >= key && val.APos <= value {
+						// значение 2- пропустить данный ген
+						uniqueSNP[val.APos] = 2
+
+						continue
+					} else if exSNPs[val.APos] == 1 {
+						/*
+							exSNPs - снипы, которые исключаются из анализа. Загружаются командой --exclude-snp
+							значение =2 пропускаем позицию
+						*/
+						uniqueSNP[val.APos] = 2
+						continue
+
+						// fmt.Println(val.APos)
+
+					} else {
+						if uniqueSNP[val.APos] != 2 && uniqueSNP[val.APos] != 1 && val.Indel == 0 {
+							/*
+								значение =1 , включаем позицию в формирование последовательности. Главное условие, что данная
+								прозиция является не инделом
+							*/
+							uniqueSNP[val.APos] = 1
+							aaAltCoords[fname][val.APos] = val.AltAAShort
+							posFN[val.APos] = append(posFN[val.APos], fname)
+
+						} else if val.Indel == 1 {
+							/*
+								если в позиции находится индел, то пропускаем
+							*/
+							uniqueSNP[val.APos] = 2
+							continue
+						}
+					}
+				}
+			} else {
+				if uniqueSNP[val.APos] != 2 && uniqueSNP[val.APos] != 1 && val.Indel == 0 {
+					uniqueSNP[val.APos] = 1
+					aaAltCoords[fname][val.APos] = val.AltAAShort
+					aaRefCoords[val.APos] = val.RefAAShort
+				}
+				if uniqueSNP[val.APos] == 1 {
+					posFN[val.APos] = append(posFN[val.APos], fname)
+				}
+
+			}
+
+		}
+	}
+
+	// fmt.Println(uniqueSNP)
+
+	for key, value := range uniqueSNP {
+
+		if value == 1 {
+			if len(dpMAP[key]) >= *annMinPosNbr {
+				AllPos = append(AllPos, key)
+
+			}
+
+		}
+
+	}
+	// go process("Working...          ")
+	// AllPos = unique(AllPosUnsort)
+
+	sort.Ints(AllPos)
+	for _, allpos := range AllPos {
+
+		for _, file := range *files {
+			if strings.Contains(strings.Join(posFN[allpos], " "), file) {
+				posFreq[allpos] = append(posFreq[allpos], "1")
+
+			} else {
+				// fmt.Println(allpos, 0, file)
+				posFreq[allpos] = append(posFreq[allpos], "0")
+			}
+
+		}
+	}
+
+	if nbrOfSNP == 0 {
+		nbrOfSNP = len(AllPos) - 1
+	}
+
+	if nbrOfSNP > len(AllPos) {
+		nbrOfSNP = len(AllPos) - 1
+	}
+
+	if randomize == true && nbrOfSNP != 0 {
+		posAlreadyIs := make(map[int]int)
+		rand.Seed(time.Now().UnixNano())
+		for i := 1; i <= nbrOfSNP; i++ {
+			rnd := rand.Intn(len(AllPos)-i) + i
+			// fmt.Println(AllPos[rnd])
+			if posAlreadyIs[rnd] < 1 {
+				TempPos = append(TempPos, AllPos[rnd])
+				posAlreadyIs[rnd] = posAlreadyIs[rnd] + 1
+			}
+
+		}
+	} else if randomize == false {
+
+		for i := 0; i <= nbrOfSNP; i++ {
+			// rnd := rand.Intn(len(AllPos)-i) + i
+			// fmt.Println(AllPos[rnd])
+
+			TempPos = append(TempPos, AllPos[i])
+		}
+	}
+
+	sort.Ints(TempPos)
+	// fmt.Println(posFreq)
+	for _, pos := range TempPos {
+		var count0, count1 int
+		for i := 0; i < len(posFreq[pos]); i++ {
+			if posFreq[pos][i] == "0" {
+				count0++
+			} else if posFreq[pos][i] == "1" {
+				count1++
+			}
+		}
+		if count0 != 0 {
+			// if *annMinPosNbr!=0 &&  {
+			//
+			// }
+			altPercent = (count1 * 100) / len(posFreq[pos])
+			altMinMax = strings.Split(*annAltRange, ":")
+			if len(altMinMax) != 0 {
+				altMin, _ = strconv.Atoi(altMinMax[0])
+				altMax, _ = strconv.Atoi(altMinMax[1])
+			}
+			// fmt.Println(altPercent,altMin,altMax)
+			if altPercent >= altMin && altPercent <= altMax {
+				SelectedPos = append(SelectedPos, pos)
+				if *gbDebug {
+					fmt.Printf("pos:%v isRef:%v,isAlt:%v %v legnth_array: %v AltPerc: %v \n", pos, count0, count1, posFreq[pos], len(posFreq[pos]), altPercent)
+					// fmt.Println(*annTest)
+				}
+			}
+
+		}
+
+	}
+
+	// -pos_file ФЛАГ
+
+	sort.Ints(SelectedPos)
+	for fname, snps := range snpCacheMap {
+
+		pos := make(map[int]string)
+		var buffer strings.Builder
+		// var aaSNPpos []int
+
+		buffer.WriteString(fmt.Sprintf(">%v\n", fname))
+		switch typeof {
+		case ncFlag:
+			for _, val := range snps {
+				pos[val.APos] = val.Alt
+
+			}
+			nTax = len(snpCacheMap)
+			nChar = len(SelectedPos)
+			for _, allpos := range SelectedPos {
+				// posCount[allpos] = posCount[allpos] + 1
+				if pos[allpos] != "" {
+
+					// buffer.WriteString(pos[allpos])
+					nexusTaxa[fname] = append(nexusTaxa[fname], pos[allpos])
+
+				} else {
+
+					// buffer.WriteString(getNucFromGenomePos(allpos))
+					nexusTaxa[fname] = append(nexusTaxa[fname], getNucFromGenomePos(allpos))
+				}
+
+			}
+
+		}
+
+	}
+	if len(nexusTaxa) != 0 {
+		// var taxNbr int
+		// fmt.Println(nexusTaxa)
+		// fmt.Printf("#nexus\nBEGIN Taxa;\nDIMENSIONS\nntax=%v;\nTAXLABELS\n", nTax)
+		fmt.Printf("#NEXUS\nBegin data;\nDimensions ntax=%v nchar=%v\nFormat datatype=dna missing=N gap=-;\n", nTax, nChar)
+		// for key := range nexusTaxa {
+		// 	taxNbr++
+		// 	fmt.Printf("[%v]\t'%v'\n", taxNbr, key)
+		// }
+		fmt.Printf("matrix\n")
+		for key, val := range nexusTaxa {
+
+			fmt.Printf("%v  \n%v\n", key, strings.Join(val, ""))
+		}
+		fmt.Printf(";\nEnd;\n")
+	}
+	// fmt.Println(buffer.Len())
+	// fmt.Println(len(buffer.String()))
+
+	// 	case aaFlag:
+	//
+	// 		for _, allpos := range SelectedPos {
+	// 			if aaAltCoords[fname][allpos] == "" {
+	// 				buffer.WriteString(strings.ToLower(aaRefCoords[allpos]))
+	// 				aaSNPpos = append(aaSNPpos, allpos)
+	// 			} else if aaAltCoords[fname][allpos] != "" {
+	// 				aaSNPpos = append(aaSNPpos, allpos)
+	// 				buffer.WriteString(aaAltCoords[fname][allpos])
+	// 			}
+	//
+	// 		ResSeq = append(ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: aaSNPpos})
+	//
+	// 	}
+	// }
+
+	// return ResSeq
 }
 
 func unique(list []int) []int {
@@ -3318,7 +3643,7 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 				// "PMN"   // position:Mutation:NAME 			4326236_C>T	ETO_ethA_Gly413Asp
 				// "LSAAN" //locus:shortAA:codon:shortAA:name
 				// "LLAAN" // locus:longAA:codon:longAA:name
-				// "LCN"   //locus:codon:name
+				// "LCN"   //locus:codon:name  -> Rv0667:codon491:RpoB_codon491
 				case tLMN:
 
 					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) && lGpoS == snpFromFile.PosInGene {
@@ -4776,7 +5101,8 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 				idxVal, idxRes := amino.GetComplexIndex(val.RefAAShort, val.AltAAShort, false)
 				// fmt.Println(idxVal, idxRes)
 				if val.TypeOf == "CDS" {
-					PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.PosInGene, val.AltAA, val.Direction, val.Mutation, idxVal, idxRes)
+					PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
+						val.Mutation, idxVal, idxRes)
 				} else {
 					PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, "-", "-", "-", val.Direction, "-", "-", "-")
 				}
@@ -6416,7 +6742,7 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 	nTax = len(snpCacheMap)
 	nChar = len(SelectedPos)
 	// fmt.Println(AllPos)
-	if *annBinOutFormat == "phylip" {
+	if *annOutFormat == "phylip" {
 		fmt.Printf("%v\t%v\n", nTax, nChar)
 	}
 	for fname, snps := range snpCacheMap {
@@ -6428,7 +6754,7 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 		switch typeof {
 		case "Binary":
 
-			if *annBinOutFormat == "phylip" {
+			if *annOutFormat == "phylip" {
 				for _, val := range snps {
 					pos[val.APos] = val.Alt
 
@@ -6447,7 +6773,7 @@ func makeSeqBinary(typeof string, verbose bool, ref bool, exGenes map[int]int, e
 
 				fmt.Println(fname, "\t", buffer.String())
 
-			} else if *annBinOutFormat == "nexus" {
+			} else if *annOutFormat == "nexus" {
 
 				for _, val := range snps {
 					pos[val.APos] = val.Alt
