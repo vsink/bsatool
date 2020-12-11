@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"compress/lzw"
-
 	"sort"
 	"strconv"
 
@@ -264,7 +263,8 @@ type (
 		APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen, Start, End, NucCore, TangIdxVal, DP, Indel int
 		RefCodon, AltCodon, RefAA, AltAA, Locus,
 		Direction, NucInPos, Product, Name,
-		RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf, ComplexIndex, FName, IndelType, IndelRef string
+		RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf, ComplexIndex, FName, IndelType, IndelRef,
+		IndelAlt string
 		InterPro, PDB, ProSite []string
 	}
 
@@ -512,34 +512,39 @@ func main() {
 				parserBulkVCF(*annWithFilenames)
 				// go run bsatool.go annotate --vcf list --mkseq=NC  --db test_core
 
-			} else if *gbWeb == true && *annMakeSeq == "NC" {
+			} else if *gbWeb == true && strings.ToUpper(*annMakeSeq) == "NC" {
 				createNCWebServer(*gbPort, exGenes, exSNPs)
-			} else if *gbWeb == false && *annMakeSeq != "Binary" && *annOutFormat == "" {
+			} else if *gbWeb == false && *annMakeSeq == "NC" && strings.ToUpper(*annOutFormat) != "NEXUS" {
 				// seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef)
 
 				/* alt-range значит, что процент встречаемости альтернативного аллеля в последовательности будет в диапазоне --alt-range=10:80
-				go run bsatool.go annotate --vcf list --mkseq=NC  --db test_core --debug --alt-range=10:80
-
+								go run bsatool.go annotate --vcf list --mkseq=NC  --db test_core --debug --alt-range=10:80
+				makeSeq
 				*/
 
 				seq := makeSeq(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs, *gbRandomize)
+				// fmt.Println(len(seq))
 				for i := 0; i < len(seq); i++ {
 					fmt.Println(seq[i].Seq)
 				}
 				if *gbDebug == true {
 					fmt.Println(seq[0].UsedPositions)
 				}
-			} else if *gbWeb == false && *annMakeSeq != "Binary" && *annOutFormat == "nexus" {
+			} else if *gbWeb == false && strings.ToUpper(*annMakeSeq) != "BINARY" && strings.ToUpper(*annOutFormat) == "NEXUS" {
 				// fmt.Println(exGenes,exSNPs)
 				makeSeqNex(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs, *gbRandomize)
 
-			} else if *gbWeb == false && *annMakeSeq == "Binary" {
+			} else if *gbWeb == false && strings.ToUpper(*annMakeSeq) == "BINARY" {
 				// go run bsatool.go annotate --vcf list --mkseq=NC  --db test_core
 				// go run bsatool.go annotate --vcf list --mkseq=Binary  --db test_core
 				// go run  bsatool.go annotate --db test_core --vcf list --exclude-genes=ppe.genes --exclude-snp=drugs3.
 				// txt --mkseq=Binary --dp=30 --exclude-regions=exgenes.txt --min-pos-nbr=2 --output-format="nexus"
 
 				makeSeqBinary(*annMakeSeq, *gbVerbose, *annMakeSeqRef, exGenes, exSNPs, *gbRandomize, *gbDP)
+				// bsatool annotate --db sars --vcf list  --mkseq=Alignment --indel
+
+			} else if *gbWeb == false && strings.ToUpper(*annMakeSeq) == "ALIGNMENT" {
+				makeAlign(false, false)
 			}
 		} else {
 			// go run bsatool.go annotate --vcf 161_RuU_m.vcf  --db test_core -w
@@ -1721,6 +1726,8 @@ func parserVCF(f string, print bool, dpFilter int, genes []geneInfo) []snpInfo {
 							snp.DP = dp
 							snp.Indel = 1
 							snp.Alt = fmt.Sprintf("%v/%v", ref, alt)
+							snp.IndelAlt = alt
+							snp.IndelRef = ref
 							if len(ref) > len(alt) {
 								snp.IndelType = fmt.Sprintf("del%v", alt)
 
@@ -2099,7 +2106,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 	// AllPos = unique(AllPosUnsort)
 
 	sort.Ints(AllPos)
-
+	// fmt.Println(AllPos)
 	for _, allpos := range AllPos {
 		for _, file := range *files {
 
@@ -2113,7 +2120,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 
 		}
 	}
-
+	// fmt.Println(posFreq)
 	if nbrOfSNP == 0 {
 		nbrOfSNP = len(AllPos) - 1
 	}
@@ -2145,6 +2152,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 	}
 
 	sort.Ints(TempPos)
+	// fmt.Println(TempPos)
 
 	for _, pos := range TempPos {
 		var count0, count1 int
@@ -2183,6 +2191,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 
 	sort.Ints(SelectedPos)
 
+	// fmt.Println(SelectedPos)
 	if *annPosFile != "" && typeof == ncFlag {
 		fOut, err := os.Create(*annPosFile)
 		fOutF, err := os.Create(fmt.Sprintf("%v_files.txt", *annPosFile))
@@ -2221,6 +2230,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 	}
 
 	// fmt.Println(AllPos)
+	// fmt.Println(snpCacheMap)
 	for fname, snps := range snpCacheMap {
 
 		// if verbose == true {
@@ -2243,6 +2253,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 				// if exGenes[val.Locus] == 1 {
 				// 	fmt.Println(val.Locus)
 				// }
+				// fmt.Println(pos)
 
 			}
 			// nTax = len(snpCacheMap)
@@ -2280,9 +2291,10 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 				// 	// fmt.Printf("\n;\nEnd;\n")
 				// }
 
-				ResSeq = append(
-					ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: SelectedPos, TypeOfSeq: "AA"})
 			}
+			ResSeq = append(
+				ResSeq, seqInfo{Name: fname, Seq: buffer.String(), UsedPositions: SelectedPos, TypeOfSeq: "AA"})
+			// fmt.Println(ResSeq)
 			// fmt.Println(buffer.Len())
 			// fmt.Println(len(buffer.String()))
 
@@ -2376,7 +2388,7 @@ func makeSeq(typeof string, verbose bool, ref bool, exGenes map[int]int, exSNPs 
 	// 	fmt.Printf("%v\t:\nThere was passed %v SNPs from exclude gene file\n And %v SNPs from exclude snp file\n", fname, passSNP["genes"], passSNP["snp"])
 	// }
 	// }
-
+	// fmt.Println(ResSeq)
 	return ResSeq
 }
 
@@ -5101,6 +5113,9 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 				idxVal, idxRes := amino.GetComplexIndex(val.RefAAShort, val.AltAAShort, false)
 				// fmt.Println(idxVal, idxRes)
 				if val.TypeOf == "CDS" {
+					// fmt.Printf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
+					// 	val.Mutation, idxVal, idxRes)
+					// fmt.Println(idxVal)
 					PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
 						val.Mutation, idxVal, idxRes)
 				} else {
@@ -7460,9 +7475,16 @@ func calcComplexIdxFromFile(file string) {
 		if strings.Contains(scanTxt, "\t") {
 			// fmt.Println(scanTxt)
 			aaArray := strings.Split(scanTxt, "\t")
-			idxVal, idxRes := amino.GetComplexIndex(amino.GetShortNameAA(aaArray[0]), amino.GetShortNameAA(aaArray[1]), false)
+			if len(aaArray[0]) == 3 && len(aaArray[1]) == 3 {
+				idxVal, idxRes := amino.GetComplexIndex(amino.GetShortNameAA(aaArray[0]), amino.GetShortNameAA(aaArray[1]), false)
+				fmt.Printf("%v\t%v\t%v\t%v\n", aaArray[0], aaArray[1], idxVal, idxRes)
+			} else if len(aaArray[0]) == 1 && len(aaArray[1]) == 1 {
+				idxVal, idxRes := amino.GetComplexIndex(aaArray[0], aaArray[1], false)
+				fmt.Printf("%v\t%v\t%v\t%v\n", aaArray[0], aaArray[1], idxVal, idxRes)
+			}
+
 			// fmt.Println()
-			fmt.Printf("%v\t%v\t%v\t%v\n", aaArray[0], aaArray[1], idxVal, idxRes)
+
 		}
 	}
 	defer f.Close()
@@ -8567,4 +8589,117 @@ func annotateFromList(file string, genes []geneInfo) {
 		}
 	}
 
+}
+
+func makeAlign(verbose bool, ref bool) {
+
+	type posPerFile struct {
+		Fname string
+		Pos   []map[int]string
+	}
+
+	var (
+		// AllPos, SelectedPos, TempPos []int
+		// ResSeq                       []seqInfo
+		// passSNP = make(map[string]int)
+		uniqueSNP = make(map[int]int)
+		// nbrOfSNP       int
+		aaAltCoords = make(map[string]map[int]string)
+		// aaRefCoords    = make(map[int]string)
+		dpMAP    = make(map[int][]int)
+		locus    = make(map[int]string)
+		prod     = make(map[int]string)
+		filesPOS = make(map[int][]string)
+		indel    = make(map[int]int)
+
+		// seq strings.Builder
+		lineSeq []string
+
+	// posPerFile = make(map[string]map[int]string)
+	// wg           sync.WaitGroup
+	// lenCount =1
+	)
+
+	// files := getListofVCF()
+
+	// queryChan := make(chan vcfInfoQuery)
+
+	// if *annSeqLen != 0 {
+	// 	nbrOfSNP = *annSeqLen
+	// }
+
+	files := &listOfFiles
+
+	for i, file := range *files {
+		aaAltCoords[file] = make(map[int]string)
+
+		// создаем запрос в виде типа vcfQuery, который передается через канал на выход <-qSNP.OutChan
+		qSNP := &vcfQuery{File: file, OutChan: make(chan vcfInfoQuery), Print: verbose}
+		go qSNP.request()
+		// snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
+		snpRes := <-qSNP.OutChan
+		snpCacheMap[snpRes.File] = snpRes.SnpInfo
+
+		if verbose == true {
+			fmt.Printf("Reading files:  %v from %v \r", i+1, len(*files))
+		}
+
+	}
+	// var wg sync.WaitGroup
+	// wg.Add(len(*files))
+	// go func() {
+	// 	defer wg.Done()
+	for fname, snps := range snpCacheMap {
+		fmt.Printf("\n>%v\n", fname)
+		snpPos := make(map[int]string)
+		for _, val := range snps {
+			// DP - глубина прочтения СНИПа
+			dpMAP[val.APos] = append(dpMAP[val.APos], val.DP)
+			// indel[val.APos] = val.Indel
+			locus[val.APos] = val.Locus
+			prod[val.APos] = val.Product
+			filesPOS[val.APos] = append(filesPOS[val.APos], fname)
+			indel[val.APos] = val.Indel
+			if val.DP < *gbDP {
+				uniqueSNP[val.APos] = 2
+			}
+			if val.Indel == 0 {
+				// fmt.Println(val.APos,val.Alt)
+				snpPos[val.APos] = val.Alt
+
+			} else {
+				// fmt.Println(val.APos,val.IndelAlt)
+				snpPos[val.APos] = val.IndelAlt
+			}
+
+		}
+
+		for i := gInfo.Start; i < gInfo.End; i++ {
+
+			// lenCount++
+			// fmt.Println(i,getNucFromGenomePos(i),snpPos[i])
+			if len(snpPos[i]) != 0 {
+				// lineSeq.WriteString(snpPos[i])
+				lineSeq = append(lineSeq, snpPos[i])
+				// fmt.Println(snpPos[i])
+			} else {
+				lineSeq = append(lineSeq, getNucFromGenomePos(i))
+				// fmt.Println(getNucFromGenomePos(i))
+			}
+			if len(lineSeq) == 70 {
+				// seq.WriteString(lineSeq.String())
+				// fmt.Println(lineSeq.String())
+				seq := strings.Join(lineSeq, "")
+				fmt.Printf("%v\n", seq)
+				lineSeq = nil
+				// seq.WriteString("\n")
+
+			}
+		}
+	}
+
+	// }()
+	// wg.Wait()
+
+	// fmt.Println(posPerFile)
 }

@@ -4274,8 +4274,7 @@ func GetComplexIndex(refAA string, altAA string, verbose bool) (string, int) {
 	// deltah := GetDeltaHInx(refAA, altAA)
 	pam := GetPAM30Inx(refAA, altAA)
 	bloss := GetBLOSSInx(refAA, altAA)
-
-	if tang <= 0.4 {
+	if tang <= 0.4 && tang != 0 {
 		idx[0] = 49
 		Cindex++
 	}
@@ -4385,7 +4384,7 @@ var aaLong = map[string]map[string]string{
 
 func GetShortNameAA(longName string) (shortName string) {
 	if len(longName) == 3 {
-		shortName =aaLong[longName]["Short"]
+		shortName = aaLong[longName]["Short"]
 	}
 	return shortName
 }
