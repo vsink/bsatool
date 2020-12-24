@@ -6002,10 +6002,13 @@ func matrixDnDs(fileOut string) {
 
 	headers.WriteString(fmt.Sprintf("Locus\t%v", groupHeader))
 
-	for key := range geneCoordinates {
-		allLocuses = append(allLocuses, key)
-	}
+	for key, val := range geneCoordinates {
+		if val.Type == "CDS" {
+			allLocuses = append(allLocuses, key)
+		}
 
+	}
+	// fmt.Println(geneCoordinates)
 	for fname, snps := range snpCacheMap {
 		// t0 = time.Now()
 		// locInGenome[fname] = make(map[string]string)
@@ -6030,6 +6033,7 @@ func matrixDnDs(fileOut string) {
 	}
 	// fmt.Println(altPositionsPerFile)
 	// dndsPerGenomeAll = make(map[string]string)
+	usedLocuses = removeStringDuplicates(usedLocusesUnsort)
 	for _, fname := range *files {
 		dndsPerGenomeAll[fname] = make(map[string]string)
 		geneDnDs[fname] = map[string]string{}
@@ -6103,10 +6107,9 @@ func matrixDnDs(fileOut string) {
 
 	}
 	i = 1
-	usedLocuses = removeStringDuplicates(usedLocusesUnsort)
 
 	// sort.Strings(genomes)
-
+	fmt.Println(usedLocuses, len(usedLocuses))
 	for _, gname := range *files {
 		t1 := time.Now()
 		for i := 0; i < len(usedLocuses); i++ {
