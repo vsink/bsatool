@@ -57,7 +57,7 @@ const (
 		`BSATool - Bacterial Snp Annotation Tool ` + "\n" +
 		`      Laboratory of Social and Epidemic Infections
  Scientific Centre for Family Health and Human Reproduction Problems
-     	(c) V.Sinkov, P.Khromova, O.Ogarkov, Irkutsk, Russia, 2017-2020                                   
+     	(c) V.Sinkov, P.Khromova, O.Ogarkov, Irkutsk, Russia, 2017-2021                                   
                                                   
 	`
 	// list   = "list"
@@ -114,6 +114,7 @@ var (
 	dbGenbank        = mkdb.Flag("gb", "Name of genbank file").Short('i').Required().String()
 	gbDP             = kingpin.Flag("dp", "dp value for filtering vcfs").Default("1").Int()
 	gbIGR            = kingpin.Flag("igr", "Show igr regions in results").Default("false").Bool()
+	gbInDel          = kingpin.Flag("indel", "indel detection").Bool()
 	// gbAbout        = kingpin.Flag("about", "About programm").Bool()
 
 	// Annotation flags
@@ -126,7 +127,6 @@ var (
 	annOutFormat     = annAction.Flag("output-format", "Output format for binary data (phylip, nexus)").String()
 	annMakeSeqRef    = annAction.Flag("ref", "Generate reference sequence").Short('r').Default("false").Bool()
 	annWithFilenames = annAction.Flag("wfn", "Show filenames in list annotated VCF's").Short('n').Bool()
-	annInDel         = annAction.Flag("indel", "indel detection").Bool()
 	annBench         = annAction.Flag("annprof", "cpuprofile").String()
 	annSeqLen        = annAction.Flag("len", "length of sequence").Int()
 	annShowFileName  = annAction.Flag("filename", "Show filename in first column for next analysis").Default("false").Bool()
@@ -142,13 +142,14 @@ var (
 	statDB     = statAction.Flag("db", "Database file").Short('b').Required().String()
 	statTask   = statAction.Flag("action", "Type of action:share, snp,dnds, ginfo,bed, matrix,range, circos").Short('a').Required().String()
 	// statWeb     = annAction.Flag("web", "").Short('w').Bool()
-	statInFile  = statAction.Flag("in", "Input file").Short('i').String()
-	statOutFile = statAction.Flag("out", "Output file").Short('o').String()
-	statTypeOf  = statAction.Flag("type", "Type of matrix (binary, gc3, dnds, nc, locus. freq, jw, summary").Short('t').String()
-	statInRule  = statAction.Flag("rule", "Input rule file").Short('r').String()
-	statAll     = statAction.Flag("all", "show all dNdS results").Default("false").Bool()
-	statBench   = statAction.Flag("statprof", "cpuprofile").String()
-	statMakeSeq = statAction.Flag("mkseq", "make seq from snp filelist").Bool()
+	statInFile     = statAction.Flag("in", "Input file").Short('i').String()
+	statInFileList = statAction.Flag("flist", "Input file").Short('f').String()
+	statOutFile    = statAction.Flag("out", "Output file").Short('o').String()
+	statTypeOf     = statAction.Flag("type", "Type of matrix (binary, gc3, dnds, nc, locus. freq, jw, summary").Short('t').String()
+	statInRule     = statAction.Flag("rule", "Input rule file").Short('r').String()
+	statAll        = statAction.Flag("all", "show all dNdS results").Default("false").Bool()
+	statBench      = statAction.Flag("statprof", "cpuprofile").String()
+	statMakeSeq    = statAction.Flag("mkseq", "make seq from snp filelist").Bool()
 	// statRefGenomeName   = statAction.Flag("ref", "set custom genome name").String()
 	statCircosTypeOf    = statAction.Flag("typeof", "make circos file without IGR regions").String()
 	statBedTypeOf       = statAction.Flag("bed-typeof", "cds, igr").String()
@@ -156,6 +157,7 @@ var (
 	statGenomeName      = statAction.Flag("genome-name", "genome name").String()
 	statShowAnnotation  = statAction.Flag("annotation", "show annotations to genes").Bool()
 	statNbrOfSNP        = statAction.Flag("snp-number", "number of snp for MST matrix").Int()
+	statMinLocusCount   = statAction.Flag("min-locus-count", "the minimal number of snp per locus ").Int()
 	statGroupFromFile   = statAction.Flag("group", "File with filenames and their groups").String()
 	statVCF             = statAction.Flag("vcf", "Input VCF file").String()
 	statLocus           = statAction.Flag("locus", "locus name").String()
@@ -669,8 +671,9 @@ func main() {
 		case "matrix":
 
 			/*
-			 go run bsatool.go stat -a matrix --db test_core -t binary (binary, gc3, dnds, table, nc, locus. freq, jw, summary) -o test.csv
-			 go run bsatool.go stat   -b test_core  -a matrix -t binary  --exclude-genes=ppe.genes --exclude-snp=drugs3.txt -o test.csv --nbr_pos 2 --debug|grep "passed"
+				 go run bsatool.go stat -a matrix --db test_core -t binary (binary, gc3, dnds, table, nc, locus. freq, jw, summary) -o test.csv
+				 go run bsatool.go stat   -b test_core  -a matrix -t binary  --exclude-genes=ppe.genes --exclude-snp=drugs3.txt -o test.csv --nbr_pos 2 --debug|grep "passed"
+				go run bsatool.go stat  -b test_core  -a matrix -t locus -o test.csv --min-locus-count 3
 			*/
 
 			if *statTypeOf != "" && *statOutFile != "" {
@@ -732,15 +735,31 @@ func main() {
 		// создает fasta файл основываясь на снипах в границах указзаного диапазона
 		case "coord2seq":
 			/*  go run bsatool.go stat  -b test_core -a coord2seq --vcf=list -i coordsToMakeSeq.txt
+			/*  go run bsatool.go stat  -b test_core -a coord2seq --vcf=list -i coordsToMakeSeq.txt -f CladaA
 
 			Rv0018c	21637	23181 <-structure file
 			*/
 
 			if *statInFile != "" && *statVCF == "list" {
 
-				for _, file := range listOfFiles {
-					result := coord2seq(*statInFile, file)
-					fmt.Printf(">%v %v(%v:%v) %v\n%v\n", result.vcfFile, result.locus, result.start, result.end, result.prod, result.altSeq)
+				if len(*statInFileList) != 0 {
+					flist := createFileListFromFile(*statInFileList)
+					// fmt.Println(flist)
+					for _, file := range flist {
+						result := coord2seq(*statInFile, file)
+						locFile := strings.Replace(result.vcfFile, ".vcf", "", -1)
+						fmt.Printf(">%v_%v(%v_%v)\n%v\n", locFile, result.locus, result.start, result.end, result.altSeq)
+						// fmt.Printf(">%v %v(%v:%v) %v\n%v\n", locFile, result.locus, result.start, result.end, result.prod, result.altSeq)
+
+					}
+				} else {
+
+					for _, file := range listOfFiles {
+						result := coord2seq(*statInFile, file)
+						locFile := strings.Replace(result.vcfFile, ".vcf", "", -1)
+						fmt.Printf(">%v_%v(%v_%v)\n%v\n", locFile, result.locus, result.start, result.end, result.altSeq)
+						// fmt.Printf(">%v %v(%v:%v) %v\n%v\n", locFile, result.locus, result.start, result.end, result.prod, result.altSeq)
+					}
 				}
 			}
 
@@ -776,13 +795,18 @@ func main() {
 						// fmt.Println(flist)
 						for _, file := range flist {
 							result := snp2SeqByLocus(*statLocus, file)
-							fmt.Printf(">%v %v(%v:%v) %v\n%v\n", result.vcfFile, result.locus, result.start, result.end, result.prod, result.altSeq)
+							locFile := strings.Replace(result.vcfFile, ".vcf", "", -1)
+							fmt.Printf(">%v\n%v\n", locFile, result.altSeq)
+							// fmt.Printf(">%v %v(%v:%v) %v\n%v\n", locFile, result.locus, result.start, result.end, result.prod, result.altSeq)
 
 						}
 					} else {
 						for _, file := range listOfFiles {
 							result := snp2SeqByLocus(*statLocus, file)
-							fmt.Printf(">%v %v(%v:%v) %v\n%v\n", result.vcfFile, result.locus, result.start, result.end, result.prod, result.altSeq)
+							locFile := strings.Replace(result.vcfFile, ".vcf", "", -1)
+							fmt.Printf(">%v\n%v\n", locFile, result.altSeq)
+							// fmt.Printf(">%v_%v(%v_%v)\n%v\n", locFile, result.locus, result.start, result.end, result.altSeq)
+							// fmt.Printf(">%v %v(%v:%v) %v\n%v\n", locFile, result.locus, result.start, result.end, result.prod, result.altSeq)
 
 						}
 					}
@@ -1807,7 +1831,7 @@ func parserVCF(f string, print bool, dpFilter int, genes []geneInfo) []snpInfo {
 			fmt.Printf("\n%v is not VCF file!!! Check it!\n", file.Name())
 			break
 		}
-		if *annInDel == true {
+		if *gbInDel == true {
 			for _, matchindel := range indel.FindAllStringSubmatch(scanner.Text(), -1) {
 				if vcfValid == true {
 					apos, _ := strconv.Atoi(matchindel[1])
@@ -2016,7 +2040,7 @@ func filterVCF(f string, dpFilter int) {
 			fmt.Printf("\n%v is not VCF file!!! Check it!\n", file.Name())
 			break
 		}
-		if *annInDel == true {
+		if *gbInDel == true {
 
 		}
 
@@ -3806,7 +3830,7 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] + 1
 					}
 				case tPMLN:
-
+					// "PMLN"  // position:Mutation:locus:NAME
 					if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v]", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
 						// chkSNP = checkSNP{FileName: file, FoundSNP: fmt.Sprintf("%v[%v:%v_%v>%v]\t", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt))}
@@ -3866,6 +3890,26 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
 						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1
 						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] + 1
+
+					} else if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) != strings.ToUpper(snpFromFile.Alt) || lAPos == snpFromFile.
+						APos && strings.ToUpper(getComplement(val.Alt)) != strings.ToUpper(snpFromFile.Alt) && snpFromFile.Direction == "r" {
+						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+							snpFromFile.CodonNbrInG, snpFromFile.AltAA),
+							snpFromFile.Locus,
+							lAPos,
+							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt)))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+								snpFromFile.CodonNbrInG, snpFromFile.AltAA))))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+								snpFromFile.CodonNbrInG, snpFromFile.AltAA)))] = 1
+						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt),
+							val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.Alt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+								snpFromFile.CodonNbrInG, snpFromFile.AltAA)))] + 1
 
 					}
 				case tSEN:
@@ -4140,6 +4184,38 @@ func makeAltString(locus string, positions []allPositionsInGene) string {
 	// seq = getNucFromGenome(start, end)
 
 	seq = getGeneSequence(locus)
+
+	for _, nuc := range seq {
+		seqSplit = append(seqSplit, string(nuc))
+
+	}
+	// fmt.Println(positions)
+	// fmt.Println(locus, seqSplit)
+
+	for _, val := range positions {
+		// fmt.Println(val.pos, val.ref, ">", val.alt, seqSplit[val.pos-1], ">", val.alt)
+		if len(seqSplit) != 0 {
+			seqSplit[val.pos-1] = val.alt
+		}
+
+		// fmt.Println(seqSplit[val.pos-1])
+	}
+
+	return strings.Join(seqSplit, "")
+
+}
+
+func makeAltStringFromPositions(start int, end int, positions []allPositionsInGene) string {
+	// var lStart, lEnd int
+	var (
+		seqSplit []string
+		seq      string
+	)
+	// lStart, lEnd := getGenePosByName(locus)
+
+	// seq = getNucFromGenome(start, end)
+
+	seq = getNucFromGenome(start, end)
 
 	for _, nuc := range seq {
 		seqSplit = append(seqSplit, string(nuc))
@@ -5259,7 +5335,7 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 			}
 		}
 
-		headers.WriteString(fmt.Sprintf("Pos\tLocus\t%vGene\tAAchange\tDirection\tMutation\tCIndex\tCIndex_Res\t", groupHeader))
+		headers.WriteString(fmt.Sprintf("Pos\tLocus\t%vGene\tAAchange\tDirection\tMutation\tCIndex\tCIndex_Res\tPosInCodon\t", groupHeader))
 		// allPosChan := make(chan []int)
 		// go func() {
 		// 	allPosChan <- getAllPosFromCacheMap()
@@ -5280,18 +5356,29 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 
 				// pos[val.APos] = val.Alt
 
-				PosInGenome[fname][val.APos] = fmt.Sprintf("%v/%v", val.NucInPos, val.Alt)
-				idxVal, idxRes := amino.GetComplexIndex(val.RefAAShort, val.AltAAShort, false)
+				// fmt.Println(val.Indel,val.IndelRef, val.IndelAlt, val.APos)
 				// fmt.Println(idxVal, idxRes)
-				if val.TypeOf == "CDS" {
-					// fmt.Printf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
-					// 	val.Mutation, idxVal, idxRes)
-					// fmt.Println(idxVal)
-					PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
-						val.Mutation, idxVal, idxRes)
-				} else {
-					PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, "-", "-", "-", val.Direction, "-", "-", "-")
+				switch val.Indel {
+				case 0:
+					PosInGenome[fname][val.APos] = fmt.Sprintf("%v/%v", val.NucInPos, val.Alt)
+					idxVal, idxRes := amino.GetComplexIndex(val.RefAAShort, val.AltAAShort, false)
+					if val.TypeOf == "CDS" {
+						// fmt.Printf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
+						// 	val.Mutation, idxVal, idxRes)
+						// fmt.Println(idxVal)
+						PosAdditionalInfo[val.APos] = fmt.Sprintf(
+							"%v\t%v%v%v\t%v\t%v\t'%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA,
+							val.Direction,
+							val.Mutation, idxVal, idxRes, val.PosInCodonG+1)
+					} else {
+						PosAdditionalInfo[val.APos] = fmt.Sprintf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t%v\t", val.Name, "-", "-", "-", val.Direction, "-", "-", "-", "-")
+					}
+				case 1:
+					PosInGenome[fname][val.APos] = fmt.Sprintf("%v/%v", val.IndelRef, val.IndelAlt)
+					PosAdditionalInfo[val.APos] = fmt.Sprintf(
+						"%v\t%v%v%v\t%v\t%v\t'%v\t%v\t%v\t", val.Name, "-", "-", "-", val.Direction, "-", "-", "-", "-")
 				}
+
 				// AllPosUnsort = append(AllPosUnsort, val.APos)
 
 			}
@@ -5415,7 +5502,13 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 			}
 			for _, allloc := range allLocuses {
 
-				locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[fmt.Sprintf("%v_%v", allloc, i)]))
+				if *statMinLocusCount != 0 {
+					if locusCount[fmt.Sprintf("%v_%v", allloc, i)] >= *statMinLocusCount {
+						locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[fmt.Sprintf("%v_%v", allloc, i)]))
+					}
+				} else {
+					locFreq[allloc] = append(locFreq[allloc], strconv.Itoa(locusCount[fmt.Sprintf("%v_%v", allloc, i)]))
+				}
 
 			}
 
@@ -7987,8 +8080,10 @@ func coord2seq(file string, vcfFile string) altStringResult {
 			// exGenes[start] = end
 			locus, _ = getGeneNameByPos(start, end)
 			prod, _ = getProductByPos(start, end)
-			altPostitions = getAltPositions(start, end, vcfFile)
-			altseq = makeAltString(locus, altPostitions)
+			altPostitions = getAltPositionsIGR(start, end, vcfFile)
+			// altseq = makeAltString(locus, altPostitions)
+			// fmt.Println(altPostitions)
+			altseq = makeAltStringFromPositions(start, end, altPostitions)
 
 			result = altStringResult{start: start, end: end, locus: locus, altSeq: altseq, prod: prod, vcfFile: vcfFile}
 			// fmt.Println(len(altPostitions), start, end, locus, prod, altseq)
@@ -8064,6 +8159,33 @@ func getAltPositions(start int, end int, vcfFile string) []allPositionsInGene {
 	for _, val := range snps {
 		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
 		if start >= val.Start && end <= val.End && val.TypeOf == "CDS" {
+			altPositions = append(altPositions, allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+			// locus = val.Locus
+		}
+	}
+
+	return altPositions
+}
+
+func getAltPositionsIGR(start int, end int, vcfFile string) []allPositionsInGene {
+	var (
+		// allLocuses []string
+		// locus        string
+		snps         []snpInfo
+		altPositions []allPositionsInGene
+		// count        = 1
+	)
+
+	snpsChan := make(chan []snpInfo)
+
+	go func() {
+		snpsChan <- makeSnps(vcfFile)
+	}()
+	snps = <-snpsChan
+	// fmt.Println(locus)
+	for _, val := range snps {
+		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
+		if start >= val.Start && end <= val.End {
 			altPositions = append(altPositions, allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
 			// locus = val.Locus
 		}
