@@ -170,6 +170,7 @@ var (
 	statFlankLeft  = statAction.Flag("flank_left", "number of left nucleotides").Int()
 	statFlankRight = statAction.Flag("flank_right", "number of right nucleotides").Int()
 	statAsTable    = statAction.Flag("table", "show results of check info as table").Bool()
+	statAsGene     = statAction.Flag("gene", "show mutation as gene coordinates").Bool()
 	statReverse    = statAction.Flag("reverse", "make seq for complementnary genes in gene direction").Bool()
 	// statAsBinary        = statAction.Flag("binary", "show results of check info as binary sequence").Bool()
 	statTH       = statAction.Flag("nbr_pos", "nbr found SNP (default = nbr files-1)").Int()
@@ -292,7 +293,7 @@ type (
 		*/
 		APos, PosInGene, PosInCodonG, CodonNbrInG, GeneLen, Start, End, NucCore, TangIdxVal, DP, Indel int
 		RefCodon, AltCodon, RefAA, AltAA, Locus,
-		Direction, NucInPos, Product, Name,
+		Direction, NucInPosCoding, NucInGenomeRef, NucInGenomeAlt, Product, Name,
 		RefAAShort, AltAAShort, Mutation, Tang, Alt, Note, ReportType, ProteinID, GeneID, GOA, TiTv, TypeOf, ComplexIndex, FName, IndelType, IndelRef,
 		IndelAlt string
 		InterPro, PDB, ProSite []string
@@ -1154,6 +1155,8 @@ func getSnpInfo(apos int, g geneInfo, alt string, flgTang bool) snpInfo {
 
 	*/
 	nucG := getNucFromGenomePos((posInGene + lStart) - 1)
+	genomePos := nucG
+	genomeAlt := alt
 	typeOf = g.TypeOf
 
 	// fmt.Println(apos, getNucFromGenomePos((posInGene+lStart)-1))
@@ -1234,13 +1237,13 @@ func getSnpInfo(apos int, g geneInfo, alt string, flgTang bool) snpInfo {
 	// }
 
 	snp = snpInfo{APos: apos, PosInGene: posInGene, PosInCodonG: posInCodonG,
-		RefCodon: codonVal, RefAA: aaRef, NucInPos: strings.ToUpper(nucG), Locus: g.Locus,
+		RefCodon: codonVal, RefAA: aaRef, NucInPosCoding: strings.ToUpper(nucG), Locus: g.Locus,
 		Direction: g.Direction, Name: g.Name, Product: g.Product,
 		Start: g.Start, End: g.End, CodonNbrInG: codonNbrInG, AltCodon: altCodon,
 		AltAA: aaAlt, RefAAShort: aaRefShort, AltAAShort: aaAltShort,
 		Mutation: mut, Tang: tangIdx, TangIdxVal: tangIdxVal, Alt: alt,
 		Note: g.Note, ReportType: locReportType, ProteinID: g.ProteinID,
-		GeneID: g.GeneID, GOA: g.GOA, GeneLen: geneLen, TiTv: titv, TypeOf: typeOf}
+		GeneID: g.GeneID, GOA: g.GOA, GeneLen: geneLen, TiTv: titv, TypeOf: typeOf, NucInGenomeRef: genomePos, NucInGenomeAlt: genomeAlt}
 
 	return snp
 }
@@ -1888,13 +1891,13 @@ func parserVCF(f string, print bool, dpFilter int, genes []geneInfo) []snpInfo {
 							// if len(ref) == 1 && len(alt) == 1 {
 
 							if *gbDebug == true {
-								if strings.ToUpper(snp.NucInPos) == strings.ToUpper(snp.Alt) {
+								if strings.ToUpper(snp.NucInPosCoding) == strings.ToUpper(snp.Alt) {
 									snp.Product = fmt.Sprintf("%v|!ref=alt[%v]dp=%v", snp.Product, f, dp)
 								}
 								// fmt.Printf("apos:%v\tref:%v\talt:%v\tdp: %v\t f:%v\n", apos, ref, alt, dp, f)
 							}
 
-							if strings.ToUpper(snp.NucInPos) != strings.ToUpper(snp.Alt) {
+							if strings.ToUpper(snp.NucInPosCoding) != strings.ToUpper(snp.Alt) {
 								snpFromVCF = append(snpFromVCF, snp)
 							}
 
@@ -1934,7 +1937,7 @@ func parserVCF(f string, print bool, dpFilter int, genes []geneInfo) []snpInfo {
 						qSnpInfo := &snpInfoQuery{OutChan: make(chan snpInfo), apos: apos, g: genes[z], alt: alt, index: *gbIndex}
 						go qSnpInfo.request()
 						snp := <-qSnpInfo.OutChan
-						// fmt.Println(snp.APos, ref, alt, snp.NucInPos, snp.Alt, snp.Direction, "!!!")
+						// fmt.Println(snp.APos, ref, alt, snp.NucInPosCoding, snp.Alt, snp.Direction, "!!!")
 						// go qSNP.request()
 						// // snpCacheFromChan = append(snpCacheFromChan, <-qSNP.OutChan)
 						// snpRes := <-qSNP.OutChan
@@ -1947,7 +1950,7 @@ func parserVCF(f string, print bool, dpFilter int, genes []geneInfo) []snpInfo {
 						snp.DP = dp
 						snp.Indel = 0
 						if *gbDebug == true {
-							if strings.ToUpper(snp.NucInPos) == strings.ToUpper(snp.Alt) {
+							if strings.ToUpper(snp.NucInPosCoding) == strings.ToUpper(snp.Alt) {
 								snp.Product = fmt.Sprintf("%v|!ref=alt[%v]dp=%v", snp.Product, f, dp)
 							}
 							// fmt.Printf("apos:%v\tref:%v\talt:%v\tdp: %v\t f:%v\n", apos, ref, alt, dp, f)
@@ -1965,7 +1968,7 @@ func parserVCF(f string, print bool, dpFilter int, genes []geneInfo) []snpInfo {
 						// br := testing.Benchmark(snp)
 						// fmt.Println(br)
 
-						if len(ref) == 1 && len(alt) == 1 && strings.ToUpper(snp.NucInPos) != strings.ToUpper(snp.Alt) {
+						if len(ref) == 1 && len(alt) == 1 && strings.ToUpper(snp.NucInPosCoding) != strings.ToUpper(snp.Alt) {
 							snpFromVCF = append(snpFromVCF, snp)
 							if print == true {
 								// printResults(snp)
@@ -2861,39 +2864,39 @@ func getInterGen(pos int) {
 func printTextResults(snps snpInfo, igr bool) {
 
 	const fullAnnotations = " {{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\") (eq .Indel 0))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\")  (eq .Indel 0))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
 		"{{else if (and (ne .TypeOf \"CDS\") (eq .ReportType \"T0\")  (eq .Indel 0))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPosCoding}}>{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{else if (and (ne .TypeOf \"CDS\") (eq .ReportType \"T1\")  (eq .Indel 0))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t-\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPosCoding}}>{{.Alt}}\t-\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{end}}"
 
 	const fullAnnotationsWithName = " {{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
-		"{{.FName}}\t{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
+		"{{.FName}}\t{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
 		"{{else if (and (ne .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPosCoding}}>{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{else if (and (ne .TypeOf \"CDS\") (eq .ReportType \"T1\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPos}}>{{.Alt}}\t-\t-\t-\t-\t-\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.APos}}{{.NucInPosCoding}}>{{.Alt}}\t-\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{end}}"
 
 	const cdsAnnotations = "{{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\")  (eq .Indel 0))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\")  (eq .Indel 0))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\")  (eq .Indel 1))}}" +
 		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.IndelType}}\t{{.Alt}}\t-\t-\t-\t-\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\")  (eq .Indel 1))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\t{{.IndelType}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\t{{.IndelType}}\n" +
 		"{{end}}"
 
 	const cdsAnnotationsWithName = "{{if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T0\"))}}" +
-		"{{.FName}}\t{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
+		"{{.FName}}\t{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Product}}\n" +
 		"{{else if (and (eq .TypeOf \"CDS\") (eq .ReportType \"T1\"))}}" +
-		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPos}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
+		"{{.Locus}}\t{{.APos}}\t{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}\t{{.RefCodon}}/{{.AltCodon}}\t{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}\t{{.Mutation}}\t{{.Tang}}({{.TangIdxVal}})\t{{.Product}}\n" +
 		"{{end}}"
 
 		// if *annHeader == true {
@@ -2954,7 +2957,7 @@ func exportToExcel(snps []snpInfo, file string) {
 			xlsx.SetCellValue("SNPs", fmt.Sprintf("A%v", i+1), snp.Locus)
 			xlsx.SetCellValue("SNPs", fmt.Sprintf("B%v", i+1), snp.Name)
 			xlsx.SetCellValue("SNPs", fmt.Sprintf("C%v", i+1), snp.APos)
-			xlsx.SetCellValue("SNPs", fmt.Sprintf("D%v", i+1), fmt.Sprintf("%v%v>%v", snp.PosInGene, snp.NucInPos, snp.Alt))
+			xlsx.SetCellValue("SNPs", fmt.Sprintf("D%v", i+1), fmt.Sprintf("%v%v>%v", snp.PosInGene, snp.NucInPosCoding, snp.Alt))
 			xlsx.SetCellValue("SNPs", fmt.Sprintf("E%v", i+1), fmt.Sprintf("%v/%v", snp.RefCodon, snp.AltCodon))
 			xlsx.SetCellValue("SNPs", fmt.Sprintf("F%v", i+1), fmt.Sprintf("%v%v%v", snp.RefAA, snp.CodonNbrInG, snp.AltAA))
 			xlsx.SetCellValue("SNPs", fmt.Sprintf("G%v", i+1), snp.Mutation)
@@ -3020,7 +3023,7 @@ func printWebResults(snps []snpInfo, port string) {
 			{{if .GeneID}}
 				<tr>
 					
-				<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
+				<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}</td>
 				<td>{{.RefCodon}}/{{.AltCodon}}</td><td><p title="{{.RefAA}}{{.CodonNbrInG}}{{.AltAA}}">{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</p></td>
 				<td><p title="Complex Index: {{.Tang}}({{.TangIdxVal}})">{{.Mutation}}</p></td><td><a href="https://www.ncbi.nlm.nih.gov/protein/{{.ProteinID}}"target="_blank"><p title="{{.Note}}">{{.Product}}</p></a></td><td><a href="https://www.ncbi.nlm.nih.gov/gene/{{.GeneID}}={{.GeneID}}" target="_blank">{{.GeneID}}</a>
 				</td><td><a href="http://www.uniprot.org/uniprot/?query={{.ProteinID}}&sort=score">{{.ProteinID}}</td>
@@ -3031,7 +3034,7 @@ func printWebResults(snps []snpInfo, port string) {
 				
 					{{/* 3 */}}
 			{{if eq .TypeOf "CDS"}}			
-				<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPos}}>{{.Alt}}</td>
+				<td><p title="{{.Note}}">{{.Locus}}</p></td><td>{{.Name}}</td><td>{{.APos}}</td><td>{{.PosInGene}}{{.NucInPosCoding}}>{{.Alt}}</td>
 				<td>{{.RefCodon}}/{{.AltCodon}}</td><td><p title="{{.RefAA}}{{.CodonNbrInG}}{{.AltAA}}">{{.RefAAShort}}{{.CodonNbrInG}}{{.AltAAShort}}</p></td>			
 					{{/* 4 */}}
 			{{if eq .Mutation "missense"}}
@@ -3431,7 +3434,7 @@ func calcJaroWinklerDist(file string, print bool) []JaroWinklerInfo {
 			for _, val := range snps {
 				// fmt.Println(val.Locus, val.PosInGene, val.Alt)
 				if val.TypeOf == "CDS" {
-					altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+					altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 				}
 			}
 		}
@@ -3506,7 +3509,7 @@ func calcGC3Val(snps []snpInfo) []GC3Type {
 
 		if val.TypeOf == "CDS" {
 			// fmt.Println(file, val.Locus)
-			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 			// fmt.Println(val.PosInGene)
 			allLocusUnsort = append(allLocusUnsort, val.Locus)
 		}
@@ -3750,16 +3753,18 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 	snpFoundCount := make(map[string]int)
 
 	type snpCheckValues struct {
-		Locus, NucInPos, RefAAShort, AltAAShort, Tag, Hash string
-		APos, CodonNbrInG                                  int
+		Locus, NucInPosCoding, RefAAShort, AltAAShort, Tag, Hash string
+		APos, CodonNbrInG                                        int
 	}
 
 	var (
-		chkSNP              []checkSNP
-		mutationsLits       []string
-		th                  int
-		captionMutationList []string
-		checkRes            = make(map[string][]snpCheckValues)
+		chkSNP                   []checkSNP
+		mutationsLits            []string
+		th                       int
+		captionMutationList      []string
+		checkRes                 = make(map[string][]snpCheckValues)
+		mutationRef, mutationAlt string
+		mutationPos              int
 	)
 
 	if *statTH != 0 {
@@ -3778,7 +3783,7 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 		// snps := parserVCF(file, false, allGenesVal)
 
 		// bar.Increment()
-		// i++
+		// i++checkSNPfromFile
 		// fmt.Printf("processed %v files\r", i)
 		snpFound[file] = make(map[string]int)
 
@@ -3869,66 +3874,83 @@ func checkSNPfromFile(f string, verbose bool, web bool, useRule bool) {
 					if strings.ToUpper(val.Locus) == strings.ToUpper(snpFromFile.Locus) && CodonNbrInG == snpFromFile.CodonNbrInG {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:codon%v]", val.Name, val.Locus, CodonNbrInG))
 						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, snpFromFile.APos,
-							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.NucInPosCoding),
 							strings.ToUpper(snpFromFile.Alt), val.Name))
 						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, snpFromFile.APos,
-							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.NucInPosCoding),
 							strings.ToUpper(snpFromFile.Alt), val.Name)] = 1 // buffer.WriteString(fmt.Sprintf("%v_%v:codon%v\t", val.Name, val.Locus, CodonNbrInG))
 						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, snpFromFile.APos,
-							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.NucInPosCoding),
 							strings.ToUpper(snpFromFile.Alt), val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, snpFromFile.APos,
-							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.NucInPosCoding),
 							strings.ToUpper(snpFromFile.Alt), val.Name)] + 1
 					}
 				case tPMN:
 
 					// "PMN"   // position:Mutation:NAME
 					// 497491_C>T   N:RD105
+					// go run bsatool.go stat --db test_core -a check -i drugs5.txt --gene
+
+					if *statAsGene == true && snpFromFile.TypeOf == "CDS" {
+						mutationRef = snpFromFile.NucInPosCoding
+						mutationAlt = snpFromFile.Alt
+						mutationPos = snpFromFile.PosInGene
+					} else {
+						mutationRef = snpFromFile.NucInGenomeRef
+						mutationAlt = snpFromFile.NucInGenomeAlt
+						mutationPos = lAPos
+					}
 
 					if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) == strings.ToUpper(snpFromFile.Alt) || lAPos == snpFromFile.APos && strings.ToUpper(getComplement(val.Alt)) == strings.ToUpper(snpFromFile.Alt) && snpFromFile.Direction == "r" {
-						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v]", val.Name, snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt)))
-						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name))
-						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = 1
-						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, lAPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt), val.Name)] + 1
+						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v]", val.Name, snpFromFile.Locus, mutationPos,
+							strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt)))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, mutationPos, strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt), val.Name))
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, mutationPos, strings.ToUpper(snpFromFile.NucInPosCoding),
+							strings.ToUpper(val.Alt), val.Name)] = 1
+						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, mutationPos, strings.ToUpper(val.Ref), strings.ToUpper(val.Alt),
+							val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v", snpFromFile.Locus, mutationPos, strings.ToUpper(val.Ref),
+							strings.ToUpper(val.Alt), val.Name)] + 1
 
 					} else if lAPos == snpFromFile.APos && strings.ToUpper(val.Alt) != strings.ToUpper(snpFromFile.Alt) || lAPos == snpFromFile.
 						APos && strings.ToUpper(getComplement(val.Alt)) != strings.ToUpper(snpFromFile.Alt) && snpFromFile.Direction == "r" {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
 							snpFromFile.CodonNbrInG, snpFromFile.AltAA),
 							snpFromFile.Locus,
-							lAPos,
-							strings.ToUpper(snpFromFile.NucInPos),
-							strings.ToUpper(snpFromFile.Alt)))
-						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
-							strings.ToUpper(snpFromFile.Alt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+							mutationPos,
+							strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt)))
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, mutationPos, strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
 								snpFromFile.CodonNbrInG, snpFromFile.AltAA))))
-						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
-							strings.ToUpper(snpFromFile.Alt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+						snpFound[file][fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, mutationPos, strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
 								snpFromFile.CodonNbrInG, snpFromFile.AltAA)))] = 1
-						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
-							strings.ToUpper(snpFromFile.Alt),
-							val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, lAPos, strings.ToUpper(snpFromFile.NucInPos),
-							strings.ToUpper(snpFromFile.Alt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
+						snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, mutationPos, strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt),
+							val.Name)] = snpFoundCount[fmt.Sprintf("%v:%v_%v>%v_%v*", snpFromFile.Locus, mutationPos, strings.ToUpper(mutationRef),
+							strings.ToUpper(mutationAlt), fmt.Sprintf("%v[%v:%v_%v>%v*]", fmt.Sprintf("%v<-->%v%v%v", val.Name, snpFromFile.RefAA,
 								snpFromFile.CodonNbrInG, snpFromFile.AltAA)))] + 1
 
 					}
 				case tSEN:
 					if val.StartRange < snpFromFile.APos && val.EndRange > snpFromFile.APos {
 						mapofSNP[file] = append(mapofSNP[file], fmt.Sprintf("%v[%v:%v_%v>%v]", snpFromFile.Locus, snpFromFile.Locus, snpFromFile.APos,
-							strings.ToUpper(snpFromFile.NucInPos),
+							strings.ToUpper(snpFromFile.NucInPosCoding),
 							strings.ToUpper(snpFromFile.Alt)))
-						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPos),
+						mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPosCoding),
 							snpFromFile.APos, strings.ToUpper(snpFromFile.Alt), snpFromFile.RefAAShort, snpFromFile.CodonNbrInG, snpFromFile.AltAAShort,
 							val.Tag))
 						// mutationsLits = append(mutationsLits, fmt.Sprintf("%v:%v_%v>%v_%v", fmt.Sprintf("%v[%v:%v_%v>%v]", snpFromFile.Locus, snpFromFile.Locus,
-						// 	snpFromFile.APos, strings.ToUpper(snpFromFile.NucInPos),	strings.ToUpper(snpFromFile.Alt))))
-						snpFound[file][fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPos),
+						// 	snpFromFile.APos, strings.ToUpper(snpFromFile.NucInPosCoding),	strings.ToUpper(snpFromFile.Alt))))
+						snpFound[file][fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPosCoding),
 							snpFromFile.APos, strings.ToUpper(snpFromFile.Alt), snpFromFile.RefAAShort, snpFromFile.CodonNbrInG, snpFromFile.AltAAShort, val.Tag)] = 1
-						snpFoundCount[fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPos),
+						snpFoundCount[fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPosCoding),
 							snpFromFile.APos, strings.ToUpper(snpFromFile.Alt), snpFromFile.RefAAShort, snpFromFile.CodonNbrInG, snpFromFile.AltAAShort,
-							val.Tag)] = snpFoundCount[fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPos),
+							val.Tag)] = snpFoundCount[fmt.Sprintf("%v:%v%v%v[%v%v%v](%v)", snpFromFile.Locus, strings.ToUpper(snpFromFile.NucInPosCoding),
 							snpFromFile.APos, strings.ToUpper(snpFromFile.Alt), snpFromFile.RefAAShort, snpFromFile.CodonNbrInG, snpFromFile.AltAAShort, val.Tag)] + 1
-						checkRes[file] = append(checkRes[file], snpCheckValues{Locus: snpFromFile.Locus, NucInPos: snpFromFile.NucInPos,
+						checkRes[file] = append(checkRes[file], snpCheckValues{Locus: snpFromFile.Locus, NucInPosCoding: snpFromFile.NucInPosCoding,
 							APos: snpFromFile.APos, RefAAShort: snpFromFile.RefAAShort, AltAAShort: snpFromFile.AltAAShort,
 							CodonNbrInG: snpFromFile.CodonNbrInG, Tag: val.Tag})
 
@@ -4894,7 +4916,7 @@ func getGeneNameCoordsByApos(pos int) (int, int) {
 // 	// 		for _, val := range snps {
 // 	// 			if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
 
-// 	// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+// 	// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 // 	// 			}
 
 // 	// 		}
@@ -5360,7 +5382,7 @@ func makeMatrix(typeof string, fileOut string, verbose bool) {
 				// fmt.Println(idxVal, idxRes)
 				switch val.Indel {
 				case 0:
-					PosInGenome[fname][val.APos] = fmt.Sprintf("%v/%v", val.NucInPos, val.Alt)
+					PosInGenome[fname][val.APos] = fmt.Sprintf("%v/%v", val.NucInPosCoding, val.Alt)
 					idxVal, idxRes := amino.GetComplexIndex(val.RefAAShort, val.AltAAShort, false)
 					if val.TypeOf == "CDS" {
 						// fmt.Printf("%v\t%v%v%v\t%v\t%v\t%v\t%v\t", val.Name, val.RefAA, val.CodonNbrInG, val.AltAA, val.Direction,
@@ -5836,7 +5858,7 @@ func calcDnDs(vcfFile string) {
 	for _, val := range snps {
 		if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
 
-			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 		}
 
 	}
@@ -5921,7 +5943,7 @@ func matrixPrint(headers strings.Builder, buffer strings.Builder, fileOut string
 // 		for _, val := range snps {
 // 			if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
 
-// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 // 			}
 
 // 		}
@@ -6021,7 +6043,7 @@ func matrixPrint(headers strings.Builder, buffer strings.Builder, fileOut string
 // 		for _, val := range snps {
 // 			if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
 
-// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+// 				altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 // 			}
 
 // 		}
@@ -6288,8 +6310,8 @@ func matrixDnDs(fileOut string) {
 
 			if val.TypeOf == "CDS" && containsPos(altPositionsPerFile[fname][val.Locus], val.PosInGene, val.Alt) == false {
 
-				// altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
-				altPositionsPerFile[fname][val.Locus] = append(altPositionsPerFile[fname][val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+				// altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
+				altPositionsPerFile[fname][val.Locus] = append(altPositionsPerFile[fname][val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 				usedLocusesUnsort = append(usedLocusesUnsort, val.Locus)
 			}
 
@@ -8159,7 +8181,7 @@ func getAltPositions(start int, end int, vcfFile string) []allPositionsInGene {
 	for _, val := range snps {
 		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
 		if start >= val.Start && end <= val.End && val.TypeOf == "CDS" {
-			altPositions = append(altPositions, allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+			altPositions = append(altPositions, allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 			// locus = val.Locus
 		}
 	}
@@ -8186,7 +8208,7 @@ func getAltPositionsIGR(start int, end int, vcfFile string) []allPositionsInGene
 	for _, val := range snps {
 		// fmt.Println(val.Locus, val.PosInGene, val.Alt)
 		if start >= val.Start && end <= val.End {
-			altPositions = append(altPositions, allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+			altPositions = append(altPositions, allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 			// locus = val.Locus
 		}
 	}
@@ -8222,7 +8244,7 @@ func countSNP(vcfFile string) {
 	for _, val := range snps {
 		if val.TypeOf == "CDS" && containsPos(altPositions[val.Locus], val.PosInGene, val.Alt) == false {
 
-			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPos, locus: val.Locus})
+			altPositions[val.Locus] = append(altPositions[val.Locus], allPositionsInGene{pos: val.PosInGene, alt: val.Alt, ref: val.NucInPosCoding, locus: val.Locus})
 		}
 
 	}
@@ -8704,7 +8726,7 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 						rightFlankSeq = getNucFromGenome(start, rightPos)
 						rightFlankDescr = fmt.Sprintf("+right=%v", *statFlankRight)
 					}
-					refNuc = foundPos[key].NucInPos
+					refNuc = foundPos[key].NucInPosCoding
 					posInGene = (key - start) + 1
 					altNuc = foundPos[key].Alt
 					// posInGeneT := foundPos[key].PosInGene
@@ -8723,7 +8745,7 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 						leftFlankSeq = getReverseComplement(getNucFromGenome(leftPos, start))
 						rightFlankDescr = fmt.Sprintf("+c_right=%v", *statFlankRight)
 					}
-					refNuc = foundPos[key].NucInPos
+					refNuc = foundPos[key].NucInPosCoding
 					altNuc = foundPos[key].Alt
 					posInGene = (end - key) + 1
 					seq = getReverseComplement(getNucFromGenome(start, end))
@@ -8743,7 +8765,7 @@ func checkPosListVCF(fileUniq string, makeSeq bool) {
 						rightFlankSeq = getNucFromGenome(start, rightPos)
 						rightFlankDescr = fmt.Sprintf("+right=%v", *statFlankRight)
 					}
-					refNuc = getReverseComplement(foundPos[key].NucInPos)
+					refNuc = getReverseComplement(foundPos[key].NucInPosCoding)
 					posInGene = (end - key) + 1
 					altNuc = getReverseComplement(foundPos[key].Alt)
 					// posInGeneT := foundPos[key].PosInGene
